@@ -227,6 +227,22 @@ We need to convert these to type-safe Domain enums:
 - `Surface.ASPHALT`
 - `Smoothness.BAD`
 
+### Transformation Outputs (OSM → Domain)
+
+Derived fields are computed in the **Domain** layer from the parsed tags and geometry.
+
+| Entity | Derived field | How it's computed | Layer |
+|--------|---------------|-------------------|-------|
+| Road | `length` | Sum of Haversine distances across geometry points | Domain (Road) |
+| Road | `surface_factor` | `RoadPenalty.from_road_attributes(surface, smoothness)` | Domain (RoadPenalty) |
+| Road | `smoothness_factor` | `RoadPenalty.from_road_attributes(surface, smoothness)` | Domain (RoadPenalty) |
+| Road | `effective_speed_kmh` | `max_speed` if present else default by `RoadType` | Domain (Road) |
+| Road | `penalized_speed_kmh` | `effective_speed_kmh × penalty factors` | Domain (Road) |
+| POI | `is_24_7` | Parsed `OperatingHours.is_24_7` from `opening_hours` | Domain (OperatingHours) |
+| POI | `formatted_address` | `Address.format()` from `addr:*` tags | Domain (Address) |
+| Zone | `area` | Polygon area via planar projection (approx. square meters) | Domain (Zone) |
+| Zone | `centroid` | Polygon centroid via planar projection (approx. lat/lon) | Domain (Zone) |
+
 ### Example Transformers
 
 #### RoadTypeTransformer

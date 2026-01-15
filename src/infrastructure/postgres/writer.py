@@ -79,6 +79,11 @@ class PostgresWriter(GeoRepository):
                     road.lanes,
                     road.oneway,
                     road.max_speed,
+                    road.length,
+                    road.surface_factor,
+                    road.smoothness_factor,
+                    road.effective_speed_kmh,
+                    road.penalized_speed_kmh,
                     json.dumps(road.tags) if road.tags else None,
                 ))
 
@@ -102,9 +107,12 @@ class PostgresWriter(GeoRepository):
         query = """
             INSERT INTO roads (
                 osm_id, geometry, road_type, surface, smoothness,
-                name, lanes, oneway, max_speed, tags
+                name, lanes, oneway, max_speed,
+                length, surface_factor, smoothness_factor,
+                effective_speed_kmh, penalized_speed_kmh, tags
             )
-            VALUES (%s, ST_GeomFromEWKT(%s), %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, ST_GeomFromEWKT(%s), %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s)
             ON CONFLICT (osm_id) DO UPDATE SET
                 geometry = EXCLUDED.geometry,
                 road_type = EXCLUDED.road_type,
@@ -114,6 +122,11 @@ class PostgresWriter(GeoRepository):
                 lanes = EXCLUDED.lanes,
                 oneway = EXCLUDED.oneway,
                 max_speed = EXCLUDED.max_speed,
+                length = EXCLUDED.length,
+                surface_factor = EXCLUDED.surface_factor,
+                smoothness_factor = EXCLUDED.smoothness_factor,
+                effective_speed_kmh = EXCLUDED.effective_speed_kmh,
+                penalized_speed_kmh = EXCLUDED.penalized_speed_kmh,
                 tags = EXCLUDED.tags,
                 updated_at = NOW()
         """
@@ -156,6 +169,8 @@ class PostgresWriter(GeoRepository):
                     poi.opening_hours.raw if poi.opening_hours else None,
                     poi.price_range,
                     poi.website,
+                    poi.is_24_7,
+                    poi.formatted_address,
                     json.dumps(poi.tags) if poi.tags else None,
                 ))
 
@@ -178,9 +193,11 @@ class PostgresWriter(GeoRepository):
         query = """
             INSERT INTO pois (
                 osm_id, geometry, category, subcategory, name,
-                address, phone, opening_hours, price_range, website, tags
+                address, phone, opening_hours, price_range, website,
+                is_24_7, formatted_address, tags
             )
-            VALUES (%s, ST_GeomFromEWKT(%s), %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, ST_GeomFromEWKT(%s), %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s)
             ON CONFLICT (osm_id) DO UPDATE SET
                 geometry = EXCLUDED.geometry,
                 category = EXCLUDED.category,
@@ -191,6 +208,8 @@ class PostgresWriter(GeoRepository):
                 opening_hours = EXCLUDED.opening_hours,
                 price_range = EXCLUDED.price_range,
                 website = EXCLUDED.website,
+                is_24_7 = EXCLUDED.is_24_7,
+                formatted_address = EXCLUDED.formatted_address,
                 tags = EXCLUDED.tags,
                 updated_at = NOW()
         """
@@ -221,6 +240,8 @@ class PostgresWriter(GeoRepository):
                     zone.malagasy_name,
                     zone.iso_code,
                     zone.population,
+                    zone.area,
+                    _coords_to_wkt_point(zone.centroid),
                     json.dumps(zone.tags) if zone.tags else None,
                 ))
 
@@ -243,9 +264,10 @@ class PostgresWriter(GeoRepository):
         query = """
             INSERT INTO zones (
                 osm_id, geometry, admin_level, name, malagasy_name,
-                iso_code, population, tags
+                iso_code, population, area, centroid, tags
             )
-            VALUES (%s, ST_GeomFromEWKT(%s), %s, %s, %s, %s, %s, %s)
+            VALUES (%s, ST_GeomFromEWKT(%s), %s, %s, %s, %s, %s,
+                    %s, ST_GeomFromEWKT(%s), %s)
             ON CONFLICT (osm_id) DO UPDATE SET
                 geometry = EXCLUDED.geometry,
                 admin_level = EXCLUDED.admin_level,
@@ -253,6 +275,8 @@ class PostgresWriter(GeoRepository):
                 malagasy_name = EXCLUDED.malagasy_name,
                 iso_code = EXCLUDED.iso_code,
                 population = EXCLUDED.population,
+                area = EXCLUDED.area,
+                centroid = EXCLUDED.centroid,
                 tags = EXCLUDED.tags,
                 updated_at = NOW()
         """

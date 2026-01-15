@@ -76,3 +76,15 @@ class POI:
 
         # Default
         return POICategory.UNKNOWN, amenity or shop or "unknown"
+
+    @property
+    def is_24_7(self) -> bool:
+        """Whether the POI is open 24/7 based on parsed opening hours."""
+        return bool(self.opening_hours and self.opening_hours.is_24_7)
+
+    @property
+    def formatted_address(self) -> str | None:
+        """Formatted address string when available."""
+        if not self.address:
+            return None
+        return self.address.format()

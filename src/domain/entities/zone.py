@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import IntEnum
+from math import cos, degrees, radians
 
 from domain.value_objects import Coordinates
 
@@ -75,3 +76,51 @@ class Zone:
             j = i
 
         return inside
+
+    @property
+    def area(self) -> float:
+        """Approximate polygon area in square meters (equirectangular projection)."""
+        area, _ = self._planar_area_and_centroid()
+        return area
+
+    @property
+    def centroid(self) -> Coordinates:
+        """Approximate polygon centroid (lat/lon)."""
+        _, centroid = self._planar_area_and_centroid()
+        return centroid
+
+    def _planar_area_and_centroid(self) -> tuple[float, Coordinates]:
+        """Compute area and centroid using a simple planar projection."""
+        coords = self.geometry
+        if coords[0] != coords[-1]:
+            coords = [*coords, coords[0]]
+
+        lats = [c.lat for c in coords]
+        lat0 = radians(sum(lats) / len(lats))
+
+        R = 6_371_000.0  # Earth radius in meters
+        points = [
+            (radians(c.lon) * R * cos(lat0), radians(c.lat) * R) for c in coords
+        ]
+
+        area2 = 0.0
+        cx = 0.0
+        cy = 0.0
+        for i in range(len(points) - 1):
+            x0, y0 = points[i]
+            x1, y1 = points[i + 1]
+            cross = x0 * y1 - x1 * y0
+            area2 += cross
+            cx += (x0 + x1) * cross
+            cy += (y0 + y1) * cross
+
+        if area2 == 0.0:
+            return 0.0, coords[0]
+
+        area = abs(area2) / 2.0
+        cx /= 3.0 * area2
+        cy /= 3.0 * area2
+
+        lon = degrees(cx / (R * cos(lat0)))
+        lat = degrees(cy / R)
+        return area, Coordinates(lat=lat, lon=lon)

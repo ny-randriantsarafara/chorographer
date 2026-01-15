@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 
 from domain.enums import RoadType, Surface, Smoothness
-from domain.value_objects import Coordinates
+from domain.value_objects import Coordinates, RoadPenalty
 
 
 @dataclass(slots=True)
@@ -76,3 +76,27 @@ class Road:
     def effective_speed_kmh(self) -> int:
         """Get max_speed if set, otherwise default speed."""
         return self.max_speed if self.max_speed else self.default_speed_kmh
+
+    @property
+    def penalty(self) -> RoadPenalty:
+        """Compute penalty factors for this road based on surface and smoothness."""
+        return RoadPenalty.from_road_attributes(
+            surface=self.surface,
+            smoothness=self.smoothness,
+            is_rainy_season=False,
+        )
+
+    @property
+    def surface_factor(self) -> float:
+        """Penalty factor for the road surface."""
+        return self.penalty.surface_factor
+
+    @property
+    def smoothness_factor(self) -> float:
+        """Penalty factor for the road smoothness."""
+        return self.penalty.smoothness_factor
+
+    @property
+    def penalized_speed_kmh(self) -> float:
+        """Speed after applying penalty factors to the effective speed."""
+        return self.penalty.apply_to_speed(self.effective_speed_kmh)
