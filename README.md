@@ -2,6 +2,8 @@
 
 ETL pipeline for extracting OpenStreetMap (OSM) data from Madagascar and ingesting it into PostgreSQL (lemurion database).
 
+**Keywords:** OpenStreetMap, OSM, Madagascar, ETL, geospatial, PostGIS, PostgreSQL, hexagonal architecture, data pipeline
+
 ## Architecture
 
 This project follows **Hexagonal Architecture** (Domain / Application / Infrastructure):
@@ -64,7 +66,3 @@ Configure via environment variables or a local `.env` file:
 - `BATCH_SIZE`: Insert batch size (default: `1000`)
 - `LOG_LEVEL`: Log level (default: `INFO`)
 - `LOG_FORMAT`: `console` or `json` (default: `console`)
-
-## License
-
-MIT
