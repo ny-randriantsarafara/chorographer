@@ -2,16 +2,21 @@
 
 from pathlib import Path
 from functools import lru_cache
+import os
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Find project root directory (where .env is located)
+_current_file = Path(__file__).resolve()
+_project_root = _current_file.parent.parent.parent.parent
 
 
 class Settings(BaseSettings):
     """Application configuration from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_project_root / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
     )
