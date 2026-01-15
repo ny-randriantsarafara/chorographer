@@ -3,8 +3,7 @@
 Writes transformed OSM data to the indri database.
 """
 
-# TODO: Implement PostgreSQL writer in next iteration
-# - PostgresWriter class
-# - Batch insert operations
-# - Connection pooling
-# - Schema management
+from infrastructure.postgres.connection import create_pool, get_pool
+from infrastructure.postgres.writer import PostgresWriter
+
+__all__ = ["create_pool", "get_pool", "PostgresWriter"]

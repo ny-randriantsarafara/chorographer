@@ -1,0 +1,287 @@
+"""Transform OSM raw data to domain entities.
+
+This module contains transformation logic that converts raw OSM data
+(from the infrastructure layer) into domain entities.
+"""
+
+from domain import (
+    Road,
+    POI,
+    Zone,
+    AdminLevel,
+    Coordinates,
+    RoadType,
+    Surface,
+    Smoothness,
+    POICategory,
+    Address,
+    OperatingHours,
+)
+
+
+def parse_road_type(highway: str) -> RoadType:
+    """Convert OSM highway tag to RoadType enum."""
+    mapping = {
+        "motorway": RoadType.MOTORWAY,
+        "motorway_link": RoadType.MOTORWAY,
+        "trunk": RoadType.TRUNK,
+        "trunk_link": RoadType.TRUNK,
+        "primary": RoadType.PRIMARY,
+        "primary_link": RoadType.PRIMARY,
+        "secondary": RoadType.SECONDARY,
+        "secondary_link": RoadType.SECONDARY,
+        "tertiary": RoadType.TERTIARY,
+        "tertiary_link": RoadType.TERTIARY,
+        "residential": RoadType.RESIDENTIAL,
+        "living_street": RoadType.RESIDENTIAL,
+        "unclassified": RoadType.UNCLASSIFIED,
+        "track": RoadType.TRACK,
+        "path": RoadType.PATH,
+        "footway": RoadType.PATH,
+        "cycleway": RoadType.PATH,
+    }
+    return mapping.get(highway, RoadType.UNCLASSIFIED)
+
+
+def parse_surface(surface: str | None) -> Surface:
+    """Convert OSM surface tag to Surface enum."""
+    if not surface:
+        return Surface.UNKNOWN
+
+    mapping = {
+        "asphalt": Surface.ASPHALT,
+        "paved": Surface.PAVED,
+        "concrete": Surface.CONCRETE,
+        "concrete:plates": Surface.CONCRETE,
+        "concrete:lanes": Surface.CONCRETE,
+        "gravel": Surface.GRAVEL,
+        "fine_gravel": Surface.GRAVEL,
+        "compacted": Surface.GRAVEL,
+        "dirt": Surface.DIRT,
+        "earth": Surface.DIRT,
+        "mud": Surface.DIRT,
+        "sand": Surface.SAND,
+        "unpaved": Surface.UNPAVED,
+        "ground": Surface.GROUND,
+        "grass": Surface.GROUND,
+    }
+    return mapping.get(surface.lower(), Surface.UNKNOWN)
+
+
+def parse_smoothness(smoothness: str | None) -> Smoothness:
+    """Convert OSM smoothness tag to Smoothness enum."""
+    if not smoothness:
+        return Smoothness.UNKNOWN
+
+    mapping = {
+        "excellent": Smoothness.EXCELLENT,
+        "good": Smoothness.GOOD,
+        "intermediate": Smoothness.INTERMEDIATE,
+        "bad": Smoothness.BAD,
+        "very_bad": Smoothness.VERY_BAD,
+        "horrible": Smoothness.HORRIBLE,
+        "very_horrible": Smoothness.HORRIBLE,
+        "impassable": Smoothness.IMPASSABLE,
+    }
+    return mapping.get(smoothness.lower(), Smoothness.UNKNOWN)
+
+
+def parse_oneway(tags: dict[str, str]) -> bool:
+    """Parse oneway tag."""
+    oneway = tags.get("oneway", "no")
+    return oneway in ("yes", "true", "1", "-1")
+
+
+def parse_lanes(tags: dict[str, str]) -> int:
+    """Parse lanes tag, defaulting to 2."""
+    try:
+        return int(tags.get("lanes", "2"))
+    except ValueError:
+        return 2
+
+
+def parse_max_speed(tags: dict[str, str]) -> int | None:
+    """Parse maxspeed tag (handles 'XX km/h' format)."""
+    maxspeed = tags.get("maxspeed")
+    if not maxspeed:
+        return None
+
+    # Remove common suffixes
+    maxspeed = maxspeed.replace(" km/h", "").replace("km/h", "").replace(" mph", "")
+    try:
+        return int(maxspeed)
+    except ValueError:
+        return None
+
+
+def transform_road(
+    osm_id: int,
+    tags: dict[str, str],
+    coords: list[tuple[float, float]],
+) -> Road:
+    """Transform OSM way data to Road entity.
+
+    Args:
+        osm_id: OSM way ID
+        tags: OSM tags dictionary
+        coords: List of (lon, lat) coordinate tuples
+
+    Returns:
+        Road domain entity
+    """
+    geometry = [Coordinates(lat=lat, lon=lon) for lon, lat in coords]
+
+    return Road(
+        osm_id=osm_id,
+        geometry=geometry,
+        road_type=parse_road_type(tags.get("highway", "")),
+        surface=parse_surface(tags.get("surface")),
+        smoothness=parse_smoothness(tags.get("smoothness")),
+        name=tags.get("name"),
+        lanes=parse_lanes(tags),
+        oneway=parse_oneway(tags),
+        max_speed=parse_max_speed(tags),
+        tags=tags,
+    )
+
+
+def categorize_poi(tags: dict[str, str]) -> tuple[POICategory, str]:
+    """Determine POI category and subcategory from tags."""
+    amenity = tags.get("amenity")
+    shop = tags.get("shop")
+    tourism = tags.get("tourism")
+
+    # Transport
+    if amenity in ("fuel", "parking", "bus_station", "taxi", "car_rental", "ferry_terminal"):
+        return POICategory.TRANSPORT, amenity
+
+    # Food
+    if amenity in ("restaurant", "cafe", "fast_food", "bar", "food_court", "pub"):
+        return POICategory.FOOD, amenity
+
+    # Lodging
+    if amenity in ("hotel", "guest_house", "motel", "hostel"):
+        return POICategory.LODGING, amenity
+    if tourism in ("hotel", "guest_house", "motel", "hostel", "camp_site"):
+        return POICategory.LODGING, tourism
+
+    # Health
+    if amenity in ("hospital", "pharmacy", "clinic", "doctors", "dentist"):
+        return POICategory.HEALTH, amenity
+
+    # Services
+    if amenity in ("bank", "atm", "post_office", "bureau_de_change", "money_transfer"):
+        return POICategory.SERVICES, amenity
+
+    # Government
+    if amenity in ("police", "embassy", "townhall", "courthouse"):
+        return POICategory.GOVERNMENT, amenity
+
+    # Education
+    if amenity in ("school", "university", "college", "library", "kindergarten"):
+        return POICategory.EDUCATION, amenity
+
+    # Shopping
+    if shop:
+        return POICategory.SHOPPING, shop
+
+    return POICategory.UNKNOWN, amenity or shop or tourism or "unknown"
+
+
+def transform_poi(
+    osm_id: int,
+    tags: dict[str, str],
+    lon: float,
+    lat: float,
+) -> POI:
+    """Transform OSM node/way data to POI entity.
+
+    Args:
+        osm_id: OSM node/way ID
+        tags: OSM tags dictionary
+        lon: Longitude
+        lat: Latitude
+
+    Returns:
+        POI domain entity
+    """
+    category, subcategory = categorize_poi(tags)
+    address = Address.from_osm_tags(tags)
+
+    opening_hours = None
+    if "opening_hours" in tags:
+        try:
+            opening_hours = OperatingHours.parse(tags["opening_hours"])
+        except Exception:
+            pass  # Skip unparseable hours
+
+    return POI(
+        osm_id=osm_id,
+        coordinates=Coordinates(lat=lat, lon=lon),
+        category=category,
+        subcategory=subcategory,
+        name=tags.get("name"),
+        address=address if not address.is_empty else None,
+        phone=tags.get("phone") or tags.get("contact:phone"),
+        opening_hours=opening_hours,
+        website=tags.get("website") or tags.get("contact:website"),
+        tags=tags,
+    )
+
+
+def parse_admin_level(level: str | None) -> AdminLevel | None:
+    """Parse admin_level tag to AdminLevel enum."""
+    if not level:
+        return None
+
+    try:
+        level_int = int(level)
+        return AdminLevel(level_int)
+    except (ValueError, KeyError):
+        return None
+
+
+def transform_zone(
+    osm_id: int,
+    tags: dict[str, str],
+    coords: list[tuple[float, float]],
+) -> Zone | None:
+    """Transform OSM relation data to Zone entity.
+
+    Args:
+        osm_id: OSM relation ID
+        tags: OSM tags dictionary
+        coords: List of (lon, lat) coordinate tuples for outer ring
+
+    Returns:
+        Zone domain entity or None if invalid
+    """
+    admin_level = parse_admin_level(tags.get("admin_level"))
+    if admin_level is None:
+        return None
+
+    name = tags.get("name")
+    if not name:
+        return None
+
+    geometry = [Coordinates(lat=lat, lon=lon) for lon, lat in coords]
+    if len(geometry) < 3:
+        return None
+
+    population = None
+    if "population" in tags:
+        try:
+            population = int(tags["population"])
+        except ValueError:
+            pass
+
+    return Zone(
+        osm_id=osm_id,
+        geometry=geometry,
+        admin_level=admin_level,
+        name=name,
+        malagasy_name=tags.get("name:mg"),
+        iso_code=tags.get("ISO3166-2"),
+        population=population,
+        tags=tags,
+    )

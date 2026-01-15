@@ -1,6 +1,5 @@
 """Structured logging using structlog."""
 
-# TODO: Implement logging in next iteration
-# - Configure structlog processors
-# - JSON output for production
-# - Pretty print for development
+from infrastructure.logging.setup import setup_logging, get_logger
+
+__all__ = ["setup_logging", "get_logger"]

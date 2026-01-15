@@ -1,9 +1,11 @@
-"""OSM infrastructure - OpenStreetMap file reader.
+"""OSM infrastructure - OpenStreetMap data extraction.
 
-Uses osmium library to parse .pbf files.
+Uses osmium library to parse .pbf files and transform OSM data into domain entities.
+All OSM-specific knowledge (tag parsing, filtering) is encapsulated here.
 """
 
-# TODO: Implement OSM reader in next iteration
-# - PBFReader class
-# - Node, Way, Relation handlers
-# - Streaming support for large files
+from infrastructure.osm.reader import PBFReader
+from infrastructure.osm.extractor import OSMExtractor
+from infrastructure.osm.types import RawWay, RawNode, RawRelation
+
+__all__ = ["PBFReader", "OSMExtractor", "RawWay", "RawNode", "RawRelation"]

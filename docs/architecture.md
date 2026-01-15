@@ -28,20 +28,24 @@ src/
 │       └── validation.py      # ValidationError
 │
 ├── application/               # Use cases (middle layer)
-│   ├── extract_osm.py         # Extract data from OSM file
-│   ├── transform_data.py      # Transform OSM → domain entities
-│   ├── load_postgres.py       # Load entities into PostgreSQL
-│   └── run_pipeline.py        # Orchestrate full ETL
+│   └── (use cases TBD)        # Orchestrate domain + infrastructure
 │
 ├── infrastructure/            # External systems (outermost layer)
-│   ├── osm/                   # OSM file reader
-│   │   └── pbf_reader.py      # Osmium-based .pbf parser
-│   ├── postgres/              # Database writer
-│   │   └── writer.py          # Psycopg-based writer
+│   ├── osm/                   # OSM data extraction
+│   │   ├── reader.py          # PBFReader - reads raw OSM data
+│   │   ├── extractor.py       # OSMExtractor - transforms to domain entities
+│   │   ├── transformers.py    # OSM tags → Domain conversion
+│   │   ├── handlers.py        # Osmium handlers (Node, Way, Relation)
+│   │   └── types.py           # RawWay, RawNode, RawRelation
+│   ├── postgres/              # Database writer (async)
+│   │   ├── connection.py      # AsyncConnectionPool management
+│   │   ├── writer.py          # PostgresWriter (batch upserts)
+│   │   └── migrations/        # Alembic migrations
+│   │       └── versions/      # Migration scripts
 │   ├── config/                # Configuration
-│   │   └── settings.py        # Pydantic settings
+│   │   └── settings.py        # Pydantic settings (.env support)
 │   └── logging/               # Structured logging
-│       └── setup.py           # Structlog configuration
+│       └── setup.py           # Structlog (JSON/console)
 │
 └── main.py                    # Entry point
 ```
@@ -234,3 +238,93 @@ class POICategory(Enum):
     HEALTH = "health"          # hospital, pharmacy, clinic
     SHOPPING = "shopping"      # supermarket, convenience, market
 ```
+
+---
+
+## Infrastructure Layer
+
+### Configuration
+
+Environment variables (or `.env` file):
+
+```bash
+OSM_FILE_PATH=data/madagascar-latest.osm.pbf
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=indri
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=secret
+BATCH_SIZE=1000
+LOG_LEVEL=INFO
+LOG_FORMAT=console  # or "json" for production
+```
+
+### OSM Extractor
+
+Two-pass parsing for PBF files. All OSM-specific knowledge (tag parsing,
+filtering by highway type, etc.) is encapsulated in the infrastructure layer.
+
+```python
+from infrastructure.osm import PBFReader, OSMExtractor
+
+reader = PBFReader(Path("madagascar.osm.pbf"))
+extractor = OSMExtractor(reader)
+
+# Stream domain entities
+for road in extractor.extract_roads():
+    process(road)
+
+for poi in extractor.extract_pois():
+    process(poi)
+
+for zone in extractor.extract_zones():
+    process(zone)
+```
+
+**How it works:**
+1. First pass: collect node coordinates (needed for way geometries)
+2. Second pass: yield raw OSM data (RawWay, RawNode, RawRelation)
+3. OSMExtractor filters and transforms raw data → domain entities
+
+### PostgreSQL Writer (Async)
+
+```python
+from infrastructure import create_pool, PostgresWriter, settings
+
+async with create_pool(settings) as pool:
+    writer = PostgresWriter(pool, batch_size=1000)
+
+    await writer.write_roads(roads)    # Batch upsert
+    await writer.write_pois(pois)
+    await writer.write_zones(zones)
+```
+
+**Features:**
+- Async connection pooling (`psycopg_pool`)
+- Batch inserts (configurable size)
+- Upsert support (`ON CONFLICT UPDATE`)
+- PostGIS geometry conversion (WKT)
+
+### Database Schema
+
+Managed via Alembic migrations:
+
+```bash
+# Apply migrations
+cd src/infrastructure/postgres/migrations
+alembic upgrade head
+
+# Create new migration
+alembic revision -m "add segments table"
+```
+
+**Tables:**
+- `roads` - LineString geometries, GIST indexed
+- `pois` - Point geometries, GIST indexed
+- `zones` - Polygon geometries, GIST indexed
+
+All tables include:
+- `osm_id` (primary key)
+- `geometry` (PostGIS)
+- `tags` (JSONB for raw OSM data)
+- `created_at`, `updated_at` timestamps

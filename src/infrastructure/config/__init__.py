@@ -1,7 +1,5 @@
 """Configuration management using pydantic-settings."""
 
-# TODO: Implement configuration in next iteration
-# - Settings class with environment variable support
-# - OSM file path configuration
-# - PostgreSQL DSN configuration
-# - Logging configuration
+from infrastructure.config.settings import Settings, get_settings, settings
+
+__all__ = ["Settings", "get_settings", "settings"]
