@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 
-from domain import Road, POI, Zone
+from domain import Road, POI, Zone, Segment
 
 
 class GeoRepository(ABC):
@@ -46,5 +46,17 @@ class GeoRepository(ABC):
 
         Returns:
             Number of zones saved
+        """
+        ...
+
+    @abstractmethod
+    async def save_segments(self, segments: Iterable[Segment]) -> int:
+        """Save road segments to the repository.
+
+        Args:
+            segments: Iterable of Segment entities to save
+
+        Returns:
+            Number of segments saved
         """
         ...

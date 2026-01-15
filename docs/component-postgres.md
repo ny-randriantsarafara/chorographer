@@ -662,6 +662,15 @@ Similar structure with:
 - `admin_level` (2, 4, 6, 8, 10)
 - `malagasy_name`, `iso_code`, `population`
 
+### Segments Table
+
+Routing segments derived from roads (split at intersections):
+- `road_id` references `roads.osm_id`
+- `geometry` as LINESTRING with start/end points
+- `length`, `surface_factor`, `smoothness_factor`, `rainy_season_factor`
+- `base_speed`, `effective_speed_kmh`, `travel_time_seconds`, `cost`
+- `oneway` flag
+
 ---
 
 ## Example Queries

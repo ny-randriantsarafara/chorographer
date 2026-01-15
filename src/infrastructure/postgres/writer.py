@@ -8,7 +8,7 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
 from application.ports.repository import GeoRepository
-from domain import Road, POI, Zone
+from domain import Road, POI, Zone, Segment
 from infrastructure.logging import get_logger
 
 logger = get_logger(__name__)
@@ -278,6 +278,84 @@ class PostgresWriter(GeoRepository):
                 area = EXCLUDED.area,
                 centroid = EXCLUDED.centroid,
                 tags = EXCLUDED.tags,
+                updated_at = NOW()
+        """
+        async with conn.cursor() as cur:
+            await cur.executemany(query, batch)
+        await conn.commit()
+        return len(batch)
+
+    async def save_segments(self, segments: Iterable[Segment]) -> int:
+        """Batch insert segments into database.
+
+        Args:
+            segments: Iterable of Segment entities
+
+        Returns:
+            Number of segments saved
+        """
+        count = 0
+        batch: list[tuple[Any, ...]] = []
+
+        async with self.pool.connection() as conn:
+            for segment in segments:
+                batch.append((
+                    segment.id,
+                    segment.road_id,
+                    _coords_to_wkt_linestring([segment.start, segment.end]),
+                    _coords_to_wkt_point(segment.start),
+                    _coords_to_wkt_point(segment.end),
+                    segment.length,
+                    segment.penalty.surface_factor,
+                    segment.penalty.smoothness_factor,
+                    segment.penalty.rainy_season_factor,
+                    segment.oneway,
+                    segment.base_speed,
+                    segment.effective_speed_kmh,
+                    segment.travel_time_seconds,
+                    segment.cost,
+                ))
+
+                if len(batch) >= self.batch_size:
+                    count += await self._insert_segments_batch(conn, batch)
+                    batch = []
+
+            if batch:
+                count += await self._insert_segments_batch(conn, batch)
+
+        logger.info("Written segments", count=count)
+        return count
+
+    async def _insert_segments_batch(
+        self,
+        conn: AsyncConnection,
+        batch: list[tuple[Any, ...]],
+    ) -> int:
+        """Insert a batch of segments."""
+        query = """
+            INSERT INTO segments (
+                id, road_id, geometry, start_point, end_point,
+                length, surface_factor, smoothness_factor, rainy_season_factor,
+                oneway, base_speed, effective_speed_kmh, travel_time_seconds, cost
+            )
+            VALUES (
+                %s, %s, ST_GeomFromEWKT(%s), ST_GeomFromEWKT(%s), ST_GeomFromEWKT(%s),
+                %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            ON CONFLICT (id) DO UPDATE SET
+                road_id = EXCLUDED.road_id,
+                geometry = EXCLUDED.geometry,
+                start_point = EXCLUDED.start_point,
+                end_point = EXCLUDED.end_point,
+                length = EXCLUDED.length,
+                surface_factor = EXCLUDED.surface_factor,
+                smoothness_factor = EXCLUDED.smoothness_factor,
+                rainy_season_factor = EXCLUDED.rainy_season_factor,
+                oneway = EXCLUDED.oneway,
+                base_speed = EXCLUDED.base_speed,
+                effective_speed_kmh = EXCLUDED.effective_speed_kmh,
+                travel_time_seconds = EXCLUDED.travel_time_seconds,
+                cost = EXCLUDED.cost,
                 updated_at = NOW()
         """
         async with conn.cursor() as cur:

@@ -6,11 +6,13 @@ from typing import Literal
 
 from application.ports.extractor import DataExtractor
 from application.ports.repository import GeoRepository
+from domain import Road
+from domain.services import split_roads_into_segments
 from infrastructure.logging import get_logger
 
 logger = get_logger(__name__)
 
-EntityType = Literal["roads", "pois", "zones"]
+EntityType = Literal["roads", "pois", "zones", "segments"]
 
 
 @dataclass
@@ -20,6 +22,7 @@ class PipelineResult:
     roads_count: int
     pois_count: int
     zones_count: int
+    segments_count: int
     duration_seconds: float
 
 
@@ -67,18 +70,32 @@ class RunPipelineUseCase:
             PipelineResult with counts and duration.
         """
         start = perf_counter()
-        types = entity_types or {"roads", "pois", "zones"}
+        types = entity_types or {"roads", "pois", "zones", "segments"}
 
         roads_count = 0
         pois_count = 0
         zones_count = 0
+        segments_count = 0
+        roads: list[Road] | None = None
 
-        if "roads" in types:
+        if "segments" in types:
+            logger.info("Processing roads")
+            roads = list(self.extractor.extract_roads())
+            if "roads" in types:
+                roads_count = await self.repository.save_roads(roads)
+                logger.info("Roads processed", count=roads_count)
+        elif "roads" in types:
             logger.info("Processing roads")
             roads_count = await self.repository.save_roads(
                 self.extractor.extract_roads()
             )
             logger.info("Roads processed", count=roads_count)
+
+        if "segments" in types:
+            logger.info("Processing segments")
+            segments = split_roads_into_segments(roads or [])
+            segments_count = await self.repository.save_segments(segments)
+            logger.info("Segments processed", count=segments_count)
 
         if "pois" in types:
             logger.info("Processing POIs")
@@ -100,5 +117,6 @@ class RunPipelineUseCase:
             roads_count=roads_count,
             pois_count=pois_count,
             zones_count=zones_count,
+            segments_count=segments_count,
             duration_seconds=round(duration, 2),
         )

@@ -1,6 +1,7 @@
 """Domain layer - Core business logic."""
 
 from domain.entities import Road, POI, Zone, AdminLevel, Segment
+from domain.services import split_roads_into_segments
 from domain.value_objects import Coordinates, RoadPenalty, OperatingHours, TimeRange, Address
 from domain.enums import RoadType, Surface, Smoothness, POICategory
 from domain.exceptions import (
@@ -18,6 +19,7 @@ __all__ = [
     "Zone",
     "AdminLevel",
     "Segment",
+    "split_roads_into_segments",
     # Value Objects
     "Coordinates",
     "RoadPenalty",
