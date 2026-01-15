@@ -1,1 +1,1 @@
-"""Ostrakon test suite."""
+"""Chorographer test suite."""

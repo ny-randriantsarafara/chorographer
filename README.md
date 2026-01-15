@@ -1,6 +1,6 @@
 # Chorographer
 
-ETL pipeline for extracting OpenStreetMap (OSM) data from Madagascar and ingesting it into PostgreSQL (indri database).
+ETL pipeline for extracting OpenStreetMap (OSM) data from Madagascar and ingesting it into PostgreSQL (lemurion database).
 
 ## Architecture
 
@@ -9,10 +9,13 @@ This project follows **Hexagonal Architecture** (Domain / Application / Infrastr
 ```
 src/
 ├── domain/           # Core business logic
-│   ├── entities/     # Domain entities (Node, Way, Relation, etc.)
+│   ├── entities/     # Domain entities (Road, POI, Zone, Segment)
+│   ├── enums/        # Domain classification enums
+│   ├── value_objects/ # Coordinates, Address, OperatingHours, RoadPenalty
 │   └── exceptions/   # Domain-specific exceptions
 ├── application/      # Use cases and orchestration
-│   └── use_cases/    # ExtractOSM, TransformData, LoadToPostgres
+│   ├── ports/        # DataExtractor, GeoRepository
+│   └── use_cases/    # RunPipelineUseCase
 └── infrastructure/   # External system implementations
     ├── osm/          # OSM file reader (osmium)
     ├── postgres/     # Database writer (psycopg)
@@ -23,7 +26,7 @@ src/
 ## Data Flow
 
 ```
-OSM File (.pbf) → Infrastructure (Reader) → Application (Use Cases) → Infrastructure (Writer) → PostgreSQL (indri)
+OSM File (.pbf) → Infrastructure (Reader) → Application (Use Cases) → Infrastructure (Writer) → PostgreSQL (lemurion)
 ```
 
 ## Setup
@@ -31,17 +34,36 @@ OSM File (.pbf) → Infrastructure (Reader) → Application (Use Cases) → Infr
 ```bash
 # Install dependencies
 pip install -e ".[dev]"
+```
 
-# Run the pipeline
-chorographer --config config.yaml
+## Usage
+
+Run the pipeline from the source tree:
+
+```bash
+cd src
+python -m main
+```
+
+Or from the repository root:
+
+```bash
+PYTHONPATH=src python -m main
 ```
 
 ## Configuration
 
-Configure via environment variables or `config.yaml`:
+Configure via environment variables or a local `.env` file:
 
-- `OSM_FILE_PATH`: Path to the Madagascar OSM extract (.pbf)
-- `POSTGRES_DSN`: PostgreSQL connection string for indri database
+- `OSM_FILE_PATH`: Path to the OSM extract (.pbf)
+- `POSTGRES_HOST`: PostgreSQL host (default: `localhost`)
+- `POSTGRES_PORT`: PostgreSQL port (default: `5432`)
+- `POSTGRES_DB`: PostgreSQL database name (default: `lemurion`)
+- `POSTGRES_USER`: PostgreSQL user (default: `postgres`)
+- `POSTGRES_PASSWORD`: PostgreSQL password
+- `BATCH_SIZE`: Insert batch size (default: `1000`)
+- `LOG_LEVEL`: Log level (default: `INFO`)
+- `LOG_FORMAT`: `console` or `json` (default: `console`)
 
 ## License
 

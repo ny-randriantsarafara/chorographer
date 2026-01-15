@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 
 async def run() -> None:
-    """Run the Ostrakon ETL pipeline."""
+    """Run the Chorographer ETL pipeline."""
     settings = get_settings()
     setup_logging(settings.log_level, settings.log_format)
 

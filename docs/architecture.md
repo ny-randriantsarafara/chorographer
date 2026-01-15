@@ -1,8 +1,8 @@
-# Ostrakon Architecture
+# Chorographer Architecture
 
 ## Overview
 
-Ostrakon follows a **Hexagonal Architecture** (also known as Ports & Adapters) organized into three layers:
+Chorographer follows a **Hexagonal Architecture** (also known as Ports & Adapters) organized into three layers:
 
 - **Domain** - Core business logic, pure Python, no external dependencies
 - **Application** - Use cases that orchestrate domain logic
@@ -18,17 +18,21 @@ src/
 │   │   ├── poi.py             # Point of Interest (fuel, hotel, shop, etc.)
 │   │   ├── zone.py            # Administrative boundary (region, district)
 │   │   └── segment.py         # Road segment for routing graph
+│   ├── enums/                 # Road and POI classification enums
 │   ├── value_objects/         # Immutable domain values
+│   │   ├── address.py         # Address from OSM addr:* tags
 │   │   ├── coordinates.py     # Lat/Lon pair
 │   │   ├── penalty.py         # RoadPenalty (surface, smoothness, seasonal)
 │   │   └── operating_hours.py # Business hours parsing
 │   └── exceptions/            # Domain errors
-│       ├── extraction.py      # ExtractionError
-│       ├── transformation.py  # TransformationError
-│       └── validation.py      # ValidationError
+│       └── base.py            # DomainError + specialized exceptions
 │
 ├── application/               # Use cases (middle layer)
-│   └── (use cases TBD)        # Orchestrate domain + infrastructure
+│   ├── ports/                 # Interfaces for infrastructure adapters
+│   │   ├── extractor.py       # DataExtractor
+│   │   └── repository.py      # GeoRepository
+│   └── use_cases/             # Orchestrate domain + infrastructure
+│       └── run_pipeline.py    # RunPipelineUseCase
 │
 ├── infrastructure/            # External systems (outermost layer)
 │   ├── osm/                   # OSM data extraction
@@ -60,7 +64,7 @@ src/
 │  │   (osmium)      │                                  │  Writer          │  │
 │  │                 │                                  │  (psycopg)       │  │
 │  │  ┌───────────┐  │                                  │  ┌────────────┐  │  │
-│  │  │ .pbf file │  │                                  │  │ indri DB   │  │  │
+│  │  │ .pbf file │  │                                  │  │ lemurion DB│  │  │
 │  │  └───────────┘  │                                  │  └────────────┘  │  │
 │  └────────┬────────┘                                  └────────▲─────────┘  │
 │           │                                                    │            │
@@ -68,10 +72,9 @@ src/
 │           ▼                                                    │            │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
 │  │                           APPLICATION                                   │ │
-│  │  ┌──────────────┐    ┌────────────────┐    ┌─────────────────┐         │ │
-│  │  │ ExtractOSM   │───▶│ TransformData  │───▶│ LoadToPostgres  │         │ │
-│  │  │ UseCase      │    │ UseCase        │    │ UseCase         │         │ │
-│  │  └──────────────┘    └───────┬────────┘    └─────────────────┘         │ │
+│  │  ┌──────────────────┐       ┌──────────────────────────────┐         │ │
+│  │  │ RunPipelineUseCase │─────▶│ DataExtractor / GeoRepository │         │ │
+│  │  └──────────────────┘       └───────────────┬───────────────┘         │ │
 │  │                              │                                          │ │
 │  │                              │ uses                                     │ │
 │  │                              ▼                                          │ │
@@ -98,9 +101,9 @@ src/
 
 ```
 ┌──────────┐      ┌───────────┐      ┌───────────┐      ┌───────────┐      ┌──────────┐
-│  .pbf    │      │  Extract  │      │ Transform │      │   Load    │      │ PostgreSQL│
-│  file    │─────▶│  UseCase  │─────▶│  UseCase  │─────▶│  UseCase  │─────▶│  (indri)  │
-│(Madagascar)     │           │      │           │      │           │      │           │
+│  .pbf    │      │ RunPipeline │     │ DataExtractor │  │ GeoRepository │  │ PostgreSQL│
+│  file    │─────▶│  UseCase    │────▶│    Port       │──▶│    Port     │──▶│ (lemurion)│
+│(Madagascar)     │             │     │               │  │             │  │           │
 └──────────┘      └───────────┘      └───────────┘      └───────────┘      └──────────┘
                         │                  │                  │
                         │                  │                  │
@@ -143,36 +146,41 @@ Infrastructure ──▶ Application ──▶ Domain
 |-------|------|--------|-------------|
 | `osm_id` | int | OSM | Unique identifier for versioning |
 | `geometry` | list[Coordinates] | OSM | LineString coordinates |
-| `road_type` | RoadType | OSM `highway` | primary, secondary, tertiary, residential, track |
-| `surface` | Surface | OSM `surface` | asphalt, gravel, dirt, sand |
-| `smoothness` | Smoothness | OSM `smoothness` | excellent, good, intermediate, bad, very_bad |
+| `road_type` | RoadType | OSM `highway` | motorway, trunk, primary, secondary, tertiary, residential, track, path |
+| `surface` | Surface | OSM `surface` | asphalt, paved, concrete, gravel, dirt, sand, unpaved, ground |
+| `smoothness` | Smoothness | OSM `smoothness` | excellent, good, intermediate, bad, very_bad, horrible, impassable |
 | `name` | str \| None | OSM `name` | Road name |
 | `lanes` | int | OSM `lanes` | Number of lanes (default: 2) |
 | `oneway` | bool | OSM `oneway` | One-way restriction |
 | `max_speed` | int \| None | OSM `maxspeed` | Speed limit in km/h |
+| `tags` | dict[str, str] | OSM | Raw OSM tags |
 
 #### POI (Point of Interest)
 | Field | Type | Source | Description |
 |-------|------|--------|-------------|
 | `osm_id` | int | OSM | Unique identifier |
 | `coordinates` | Coordinates | OSM | Location |
-| `category` | POICategory | OSM | transport, food, lodging, services, health |
+| `category` | POICategory | OSM | transport, food, lodging, services, health, education, government |
 | `subcategory` | str | OSM `amenity`/`shop` | fuel, restaurant, hotel, pharmacy, etc. |
 | `name` | str \| None | OSM `name` | Business name |
 | `address` | Address \| None | OSM `addr:*` | Street address if available |
 | `phone` | str \| None | OSM/scraped | Contact phone |
 | `opening_hours` | OperatingHours \| None | OSM/scraped | Business hours |
 | `price_range` | int \| None | scraped | 1-4 scale |
+| `website` | str \| None | OSM/scraped | Website URL |
+| `tags` | dict[str, str] | OSM | Raw OSM tags |
 
 #### Zone (Administrative Boundary)
 | Field | Type | Source | Description |
 |-------|------|--------|-------------|
 | `osm_id` | int | OSM | Unique identifier |
 | `geometry` | list[Coordinates] | OSM | Polygon boundary |
-| `admin_level` | int | OSM | 4=region, 6=district, 8=commune |
+| `admin_level` | AdminLevel | OSM | 2=country, 4=region, 6=district, 8=commune, 10=fokontany |
 | `name` | str | OSM `name` | Zone name |
 | `malagasy_name` | str \| None | OSM `name:mg` | Malagasy name |
 | `iso_code` | str \| None | OSM `ISO3166-2` | ISO code (e.g., MG-A) |
+| `population` | int \| None | OSM/scraped | Population count |
+| `tags` | dict[str, str] | OSM | Raw OSM tags |
 
 #### Segment (for routing graph)
 | Field | Type | Source | Description |
@@ -183,6 +191,8 @@ Infrastructure ──▶ Application ──▶ Domain
 | `end` | Coordinates | derived | End node |
 | `length` | float | computed | Segment length in meters |
 | `penalty` | RoadPenalty | computed | Speed multiplier |
+| `oneway` | bool | derived | One-way restriction |
+| `base_speed` | int | derived | Base speed for this segment |
 
 ### Value Objects
 
@@ -190,6 +200,9 @@ Infrastructure ──▶ Application ──▶ Domain
 ```
 (lat: float, lon: float)
 ```
+
+#### Address
+Immutable address built from `addr:*` tags.
 
 #### RoadPenalty
 | Field | Type | Default | Description |
@@ -213,14 +226,20 @@ class RoadType(Enum):
     RESIDENTIAL = "residential"
     TRACK = "track"
     UNCLASSIFIED = "unclassified"
+    TRUNK = "trunk"
+    MOTORWAY = "motorway"
+    PATH = "path"
 
 class Surface(Enum):
     ASPHALT = "asphalt"
     PAVED = "paved"
+    CONCRETE = "concrete"
     GRAVEL = "gravel"
     DIRT = "dirt"
     SAND = "sand"
     UNPAVED = "unpaved"
+    GROUND = "ground"
+    UNKNOWN = "unknown"
 
 class Smoothness(Enum):
     EXCELLENT = "excellent"
@@ -229,6 +248,8 @@ class Smoothness(Enum):
     BAD = "bad"
     VERY_BAD = "very_bad"
     HORRIBLE = "horrible"
+    IMPASSABLE = "impassable"
+    UNKNOWN = "unknown"
 
 class POICategory(Enum):
     TRANSPORT = "transport"    # fuel, parking, bus_station
@@ -237,6 +258,9 @@ class POICategory(Enum):
     SERVICES = "services"      # bank, atm, post_office
     HEALTH = "health"          # hospital, pharmacy, clinic
     SHOPPING = "shopping"      # supermarket, convenience, market
+    EDUCATION = "education"    # school, university
+    GOVERNMENT = "government"  # police, embassy
+    UNKNOWN = "unknown"
 ```
 
 ---
@@ -251,7 +275,7 @@ Environment variables (or `.env` file):
 OSM_FILE_PATH=data/madagascar-latest.osm.pbf
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
-POSTGRES_DB=indri
+POSTGRES_DB=lemurion
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=secret
 BATCH_SIZE=1000
@@ -294,9 +318,9 @@ from infrastructure import create_pool, PostgresWriter, settings
 async with create_pool(settings) as pool:
     writer = PostgresWriter(pool, batch_size=1000)
 
-    await writer.write_roads(roads)    # Batch upsert
-    await writer.write_pois(pois)
-    await writer.write_zones(zones)
+    await writer.save_roads(roads)    # Batch upsert
+    await writer.save_pois(pois)
+    await writer.save_zones(zones)
 ```
 
 **Features:**

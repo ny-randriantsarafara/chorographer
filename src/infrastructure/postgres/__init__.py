@@ -1,6 +1,6 @@
 """PostgreSQL infrastructure - Database writer.
 
-Writes transformed OSM data to the indri database.
+Writes transformed OSM data to the lemurion database.
 """
 
 from infrastructure.postgres.connection import create_pool, get_pool
