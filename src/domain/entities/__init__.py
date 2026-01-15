@@ -1,8 +1,14 @@
-"""Domain entities - OSM data structures."""
+"""Domain entities - Core data structures for Madagascar routing."""
 
-# TODO: Define entities in next iteration
-# - Node
-# - Way
-# - Relation
-# - Tag
-# - BoundingBox
+from domain.entities.road import Road
+from domain.entities.poi import POI
+from domain.entities.zone import Zone, AdminLevel
+from domain.entities.segment import Segment
+
+__all__ = [
+    "Road",
+    "POI",
+    "Zone",
+    "AdminLevel",
+    "Segment",
+]

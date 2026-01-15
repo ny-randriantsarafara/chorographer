@@ -1,6 +1,17 @@
 """Domain exceptions - Business rule violations."""
 
-# TODO: Define exceptions in next iteration
-# - ExtractionError
-# - TransformationError
-# - ValidationError
+from domain.exceptions.base import (
+    DomainError,
+    ExtractionError,
+    TransformationError,
+    ValidationError,
+    PenaltyCalculationError,
+)
+
+__all__ = [
+    "DomainError",
+    "ExtractionError",
+    "TransformationError",
+    "ValidationError",
+    "PenaltyCalculationError",
+]
