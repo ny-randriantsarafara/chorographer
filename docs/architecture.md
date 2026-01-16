@@ -175,7 +175,7 @@ Infrastructure ──▶ Application ──▶ Domain
 |-------|------|--------|-------------|
 | `osm_id` | int | OSM | Unique identifier |
 | `geometry` | list[Coordinates] | OSM | Polygon boundary |
-| `admin_level` | AdminLevel | OSM | 2=country, 4=region, 6=district, 8=commune, 10=fokontany |
+| `zone_type` | str | OSM `admin_level` | country, region, district, commune, fokontany |
 | `name` | str | OSM `name` | Zone name |
 | `malagasy_name` | str \| None | OSM `name:mg` | Malagasy name |
 | `iso_code` | str \| None | OSM `ISO3166-2` | ISO code (e.g., MG-A) |

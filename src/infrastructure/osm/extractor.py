@@ -58,7 +58,7 @@ class OSMExtractor(DataExtractor):
             print(poi.name, poi.category)
 
         for zone in extractor.extract_zones():
-            print(zone.name, zone.admin_level)
+            print(zone.name, zone.zone_type)
     """
 
     def __init__(self, reader: PBFReader) -> None:
@@ -122,7 +122,7 @@ class OSMExtractor(DataExtractor):
         and transforms them into Zone domain entities.
 
         Yields:
-            Zone domain entities (only valid ones with proper admin_level)
+            Zone domain entities (only valid ones with proper zone_type)
         """
         logger.info("Extracting zones from OSM data")
         count = 0

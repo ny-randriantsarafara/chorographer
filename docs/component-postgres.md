@@ -356,7 +356,7 @@ async def save_zones(self, zones: List[Zone]) -> None:
             await cur.executemany(
                 """
                 INSERT INTO zones (
-                    osm_id, geometry, admin_level, name,
+                    osm_id, geometry, zone_type, name,
                     malagasy_name, iso_code, population, tags
                 ) VALUES (
                     %s, ST_GeomFromText(%s, 4326), %s, %s,
@@ -364,7 +364,7 @@ async def save_zones(self, zones: List[Zone]) -> None:
                 )
                 ON CONFLICT (osm_id) DO UPDATE SET
                     geometry = EXCLUDED.geometry,
-                    admin_level = EXCLUDED.admin_level,
+                    zone_type = EXCLUDED.zone_type,
                     name = EXCLUDED.name,
                     malagasy_name = EXCLUDED.malagasy_name,
                     iso_code = EXCLUDED.iso_code,
@@ -388,7 +388,7 @@ def _zone_to_db_row(self, zone: Zone) -> tuple:
     return (
         zone.osm_id,
         wkt,
-        zone.admin_level.value,
+        zone.zone_type,
         zone.name,
         zone.malagasy_name,
         zone.iso_code,
@@ -526,7 +526,7 @@ def upgrade():
         sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
         sa.Column('osm_id', sa.BigInteger, unique=True, nullable=False),
         sa.Column('geometry', sa.String, nullable=False),  # PostGIS GEOMETRY
-        sa.Column('admin_level', sa.Integer, nullable=False),
+        sa.Column('zone_type', sa.String(20), nullable=False),
         sa.Column('name', sa.String(255), nullable=False),
         sa.Column('malagasy_name', sa.String(255), nullable=True),
         sa.Column('iso_code', sa.String(10), nullable=True),
@@ -659,7 +659,7 @@ Similar structure with:
 
 Similar structure with:
 - `geometry` as POLYGON instead of LINESTRING
-- `admin_level` (2, 4, 6, 8, 10)
+- `zone_type` (country, region, district, commune, fokontany)
 - `malagasy_name`, `iso_code`, `population`
 
 ### Segments Table
@@ -704,9 +704,9 @@ ORDER BY distance_meters;
 ### Find Which Region Contains a Point
 
 ```sql
-SELECT name, admin_level
+SELECT name, zone_type
 FROM zones
-WHERE admin_level = 4  -- Regions
+WHERE zone_type = 'region'
   AND ST_Contains(
       geometry,
       ST_GeomFromText('POINT(47.5079 -18.8792)', 4326)

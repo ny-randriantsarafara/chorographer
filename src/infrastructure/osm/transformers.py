@@ -8,7 +8,6 @@ from domain import (
     Road,
     POI,
     Zone,
-    AdminLevel,
     Coordinates,
     RoadType,
     Surface,
@@ -229,16 +228,19 @@ def transform_poi(
     )
 
 
-def parse_admin_level(level: str | None) -> AdminLevel | None:
-    """Parse admin_level tag to AdminLevel enum."""
+def parse_zone_type(level: str | None) -> str | None:
+    """Map OSM admin_level to a zone type string."""
     if not level:
         return None
 
-    try:
-        level_int = int(level)
-        return AdminLevel(level_int)
-    except (ValueError, KeyError):
-        return None
+    mapping = {
+        "2": "country",
+        "4": "region",
+        "6": "district",
+        "8": "commune",
+        "10": "fokontany",
+    }
+    return mapping.get(level.strip())
 
 
 def transform_zone(
@@ -256,8 +258,8 @@ def transform_zone(
     Returns:
         Zone domain entity or None if invalid
     """
-    admin_level = parse_admin_level(tags.get("admin_level"))
-    if admin_level is None:
+    zone_type = parse_zone_type(tags.get("admin_level"))
+    if zone_type is None:
         return None
 
     name = tags.get("name")
@@ -278,7 +280,7 @@ def transform_zone(
     return Zone(
         osm_id=osm_id,
         geometry=geometry,
-        admin_level=admin_level,
+        zone_type=zone_type,
         name=name,
         malagasy_name=tags.get("name:mg"),
         iso_code=tags.get("ISO3166-2"),

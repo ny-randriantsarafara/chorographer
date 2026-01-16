@@ -118,20 +118,22 @@ A Zone is an administrative boundary - like a country, region, district, or town
 |-------|---------------|---------|
 | `osm_id` | Unique number from OpenStreetMap | 789012 |
 | `geometry` | List of coordinates that draw the boundary | [(lat, lon), (lat, lon), ...] |
-| `admin_level` | What level of government | 2=country, 4=region, 6=district |
+| `zone_type` | What level of government | country, region, district, commune, fokontany |
 | `name` | Official name | "Analamanga" |
 | `malagasy_name` | Name in Malagasy language | "Analamanga" |
 | `iso_code` | International code | "MG-T" |
 | `population` | How many people live there | 3,618,128 |
 | `tags` | All the raw data from OpenStreetMap | {"admin_level": "4", "name": "Analamanga"} |
 
-#### Admin Levels Explained
+#### Zone Types Explained
 
-- **Level 2**: The whole country (Madagascar)
-- **Level 4**: Regions (like Analamanga, Vakinankaratra)
-- **Level 6**: Districts (like Antananarivo-Renivohitra)
-- **Level 8**: Communes
-- **Level 10**: Fokontany (smallest administrative unit)
+Derived from OSM `admin_level` tags:
+
+- **country**: Level 2 (Madagascar)
+- **region**: Level 4 (Faritra)
+- **district**: Level 6 (Distrika)
+- **commune**: Level 8 (Kaominina)
+- **fokontany**: Level 10 (smallest administrative unit)
 
 #### Why Zones are Important
 
@@ -153,7 +155,7 @@ zone = Zone(
         Coordinates(lat=-19.1000, lon=47.3000),
         Coordinates(lat=-18.7000, lon=47.3000)  # Close the polygon
     ],
-    admin_level=AdminLevel.REGION,
+    zone_type="region",
     name="Analamanga",
     malagasy_name="Analamanga",
     iso_code="MG-T",

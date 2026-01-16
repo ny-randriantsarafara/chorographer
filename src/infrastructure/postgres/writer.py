@@ -235,7 +235,7 @@ class PostgresWriter(GeoRepository):
                 batch.append((
                     zone.osm_id,
                     _coords_to_wkt_polygon(zone.geometry),
-                    zone.admin_level.value,
+                    zone.zone_type,
                     zone.name,
                     zone.malagasy_name,
                     zone.iso_code,
@@ -263,14 +263,14 @@ class PostgresWriter(GeoRepository):
         """Insert a batch of zones."""
         query = """
             INSERT INTO zones (
-                osm_id, geometry, admin_level, name, malagasy_name,
+                osm_id, geometry, zone_type, name, malagasy_name,
                 iso_code, population, area, centroid, tags
             )
             VALUES (%s, ST_GeomFromEWKT(%s), %s, %s, %s, %s, %s,
                     %s, ST_GeomFromEWKT(%s), %s)
             ON CONFLICT (osm_id) DO UPDATE SET
                 geometry = EXCLUDED.geometry,
-                admin_level = EXCLUDED.admin_level,
+                zone_type = EXCLUDED.zone_type,
                 name = EXCLUDED.name,
                 malagasy_name = EXCLUDED.malagasy_name,
                 iso_code = EXCLUDED.iso_code,

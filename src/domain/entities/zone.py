@@ -1,20 +1,9 @@
 """Administrative zone entity."""
 
 from dataclasses import dataclass, field
-from enum import IntEnum
 from math import cos, degrees, radians
 
 from domain.value_objects import Coordinates
-
-
-class AdminLevel(IntEnum):
-    """OSM admin_level values for Madagascar."""
-
-    COUNTRY = 2  # Madagascar
-    REGION = 4  # Faritra (22 regions)
-    DISTRICT = 6  # Distrika
-    COMMUNE = 8  # Kaominina
-    FOKONTANY = 10  # Fokontany (neighborhood)
 
 
 @dataclass(slots=True)
@@ -24,7 +13,7 @@ class Zone:
     Attributes:
         osm_id: Unique OSM identifier
         geometry: List of coordinates forming the polygon boundary
-        admin_level: Administrative level (4=region, 6=district, 8=commune)
+        zone_type: Administrative type (country, region, district, commune, fokontany)
         name: Official name
         malagasy_name: Malagasy name (optional)
         iso_code: ISO 3166-2 code (optional, e.g., MG-A for Antananarivo)
@@ -33,7 +22,7 @@ class Zone:
 
     osm_id: int
     geometry: list[Coordinates]
-    admin_level: AdminLevel
+    zone_type: str
     name: str
     malagasy_name: str | None = None
     iso_code: str | None = None
@@ -44,21 +33,6 @@ class Zone:
         """Validate zone has at least 3 points (triangle)."""
         if len(self.geometry) < 3:
             raise ValueError("Zone must have at least 3 coordinate points")
-
-    @property
-    def is_region(self) -> bool:
-        """Check if this is a region-level zone."""
-        return self.admin_level == AdminLevel.REGION
-
-    @property
-    def is_district(self) -> bool:
-        """Check if this is a district-level zone."""
-        return self.admin_level == AdminLevel.DISTRICT
-
-    @property
-    def is_town(self) -> bool:
-        """Check if this is a commune-level zone."""
-        return self.admin_level == AdminLevel.COMMUNE
 
     def contains_point(self, point: Coordinates) -> bool:
         """Check if a point is inside this zone (ray casting algorithm)."""

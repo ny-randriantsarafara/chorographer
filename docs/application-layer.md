@@ -378,7 +378,7 @@ class FakeExtractor(DataExtractor):
         yield POI(osm_id=100, category=POICategory.FOOD, ...)
     
     def extract_zones(self):
-        yield Zone(osm_id=200, admin_level=AdminLevel.REGION, ...)
+        yield Zone(osm_id=200, zone_type="region", ...)
 
 
 class FakeRepository(GeoRepository):

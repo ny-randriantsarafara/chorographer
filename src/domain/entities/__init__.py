@@ -2,13 +2,12 @@
 
 from domain.entities.road import Road
 from domain.entities.poi import POI
-from domain.entities.zone import Zone, AdminLevel
+from domain.entities.zone import Zone
 from domain.entities.segment import Segment
 
 __all__ = [
     "Road",
     "POI",
     "Zone",
-    "AdminLevel",
     "Segment",
 ]
