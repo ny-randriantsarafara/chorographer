@@ -1,0 +1,37 @@
+name: Scheduled ETL
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      entity_type:
+        description: "Entity types to process (comma-separated)"
+        required: false
+        default: ""
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: |
+          if [ -n "${{ inputs.entity_type }}" ]; then
+            PYTHONPATH=src python -m main --entity-type "${{ inputs.entity_type }}"
+          elif [ -n "${ENTITY_TYPES}" ]; then
+            PYTHONPATH=src python -m main --entity-type "${ENTITY_TYPES}"
+          else
+            PYTHONPATH=src python -m main
+          fi
+        env:
+          ENTITY_TYPES: ${{ vars.PIPELINE_ENTITY_TYPES }}
+          OSM_FILE_PATH: ${{ secrets.OSM_FILE_PATH }}
+          POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+          POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
