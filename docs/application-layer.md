@@ -15,7 +15,7 @@ Imagine you want to import road data from OpenStreetMap and save it to PostgreSQ
 
 The Application Layer coordinates these steps in the right order.
 
-## Two Main Components
+## Three Main Components
 
 ### 1. Ports (Interfaces)
 
@@ -27,7 +27,14 @@ Think of a port as a job description:
 
 The Infrastructure Layer provides the actual implementations (the "employees who do the job").
 
-### 2. Use Cases
+### 2. Services
+
+Services are reusable utilities that support use cases. They handle cross-cutting concerns like:
+- Async batch processing (producer-consumer patterns)
+- Rate limiting
+- Caching strategies
+
+### 3. Use Cases
 
 Use Cases are the actual tasks the application performs. Each use case represents one complete action a user might want.
 
@@ -171,6 +178,139 @@ class GeoRepository(ABC):
 
 ---
 
+## Services Explained
+
+### What are Services?
+
+Services are reusable utilities that support use cases but don't represent business workflows themselves. They handle technical concerns that are needed by multiple use cases.
+
+### The AsyncBatcher Service
+
+The `AsyncBatcher` implements a **producer-consumer pattern** to overlap CPU-bound extraction with I/O-bound database loading.
+
+#### The Problem It Solves
+
+Without AsyncBatcher (sequential):
+```
+Extract batch 1 → Wait → Save batch 1 → Extract batch 2 → Wait → Save batch 2 → ...
+                  ↑                                       ↑
+            CPU idle                                 CPU idle
+```
+
+The CPU sits idle while waiting for database writes.
+
+With AsyncBatcher (parallel):
+```
+Producer (extraction):  [Extract 1] [Extract 2] [Extract 3] [Extract 4] ...
+                             │           │           │           │
+                             ▼           ▼           ▼           ▼
+Queue (buffer):           [batch1] → [batch2] → [batch3] → [batch4] → ...
+                             │           │           │           │
+                             ▼           ▼           ▼           ▼
+Consumer (database):      [Save 1]   [Save 2]   [Save 3]   [Save 4] ...
+```
+
+Extraction and saving happen simultaneously!
+
+#### How It Works
+
+```python
+from collections.abc import Awaitable, Callable, Iterator
+from typing import Generic, TypeVar
+import asyncio
+
+T = TypeVar("T")
+
+class AsyncBatcher(Generic[T]):
+    """Converts sync iterator to async batches via queue.
+
+    Producer-consumer pattern where:
+    - Producer: Runs sync extraction in executor (doesn't block event loop)
+    - Queue: Buffers batches between producer and consumer
+    - Consumer: Processes batches asynchronously (database writes)
+    """
+
+    def __init__(
+        self,
+        iterator: Iterator[T],
+        batch_size: int = 1000,
+        max_queue_size: int = 10,
+    ) -> None:
+        """Initialize the batcher.
+
+        Args:
+            iterator: Sync iterator yielding items to batch
+            batch_size: Number of items per batch
+            max_queue_size: Max batches to buffer (backpressure control)
+        """
+        self.iterator = iterator
+        self.batch_size = batch_size
+        self.queue: asyncio.Queue[list[T] | None] = asyncio.Queue(max_queue_size)
+
+    async def produce(self) -> None:
+        """Producer: read from iterator in executor, enqueue batches."""
+        loop = asyncio.get_event_loop()
+        while True:
+            # Run sync code in thread pool (doesn't block event loop)
+            batch = await loop.run_in_executor(None, self._iter_batches)
+            if batch is None:
+                await self.queue.put(None)  # Signal end
+                break
+            await self.queue.put(batch)
+
+    async def consume(
+        self,
+        processor: Callable[[list[T]], Awaitable[int]],
+    ) -> int:
+        """Consumer: process batches from queue asynchronously."""
+        total = 0
+        while True:
+            batch = await self.queue.get()
+            if batch is None:
+                break
+            total += await processor(batch)
+        return total
+
+    async def run(
+        self,
+        processor: Callable[[list[T]], Awaitable[int]],
+    ) -> int:
+        """Run producer and consumer concurrently."""
+        producer = asyncio.create_task(self.produce())
+        consumer = asyncio.create_task(self.consume(processor))
+        await producer
+        return await consumer
+```
+
+#### Key Design Decisions
+
+1. **run_in_executor()**: Runs sync extraction code in a thread pool so it doesn't block the async event loop.
+
+2. **Bounded Queue**: `max_queue_size` prevents memory exhaustion if extraction is faster than database writes.
+
+3. **Sentinel Value**: `None` signals the consumer that production is complete.
+
+4. **Generic Type**: Works with any entity type (Road, POI, Zone, Segment).
+
+#### Usage Example
+
+```python
+from application.services import AsyncBatcher
+
+# Create batcher for roads
+batcher: AsyncBatcher[Road] = AsyncBatcher(
+    extractor.extract_roads(),  # Sync iterator
+    batch_size=1000,
+    max_queue_size=10,
+)
+
+# Run with async processor
+total = await batcher.run(repository.save_roads_batch)
+print(f"Saved {total} roads")
+```
+
+---
+
 ## Use Cases Explained
 
 ### What are Use Cases?
@@ -183,85 +323,144 @@ Use Cases implement specific business workflows. Each use case:
 
 ### The Main Use Case: RunPipeline
 
-This is the primary use case that imports OpenStreetMap data into the database.
+This is the primary use case that imports OpenStreetMap data into the database. It supports two execution modes: **sequential** (fallback) and **parallel** (default).
 
 #### What It Does
 
+**Sequential Mode:**
 ```
 1. Extract roads from OSM file
 2. Batch them (group into sets of 1000)
 3. Save each batch to database
 4. Repeat for POIs
 5. Repeat for Zones
-6. Log progress throughout
+6. Generate segments from roads
+7. Save segments
+8. Log progress throughout
+```
+
+**Parallel Mode:**
+```
+1. Phase 1: Process roads (segments depend on roads)
+   - Extract roads with producer-consumer pattern
+   - Save roads while extracting more
+2. Phase 2: Process segments, POIs, zones concurrently
+   - asyncio.gather() runs all three in parallel
+   - Each uses its own producer-consumer queue
+3. Log progress throughout
 ```
 
 #### The Code Structure
 
 ```python
 from application.ports import DataExtractor, GeoRepository
+from application.services import AsyncBatcher
 
 class RunPipelineUseCase:
     """
     Use case for running the complete data import pipeline.
-    
-    Reads geographic data from a source and saves it to a repository.
+
+    Supports two execution modes:
+    - Sequential: Processes entities one type at a time
+    - Parallel: Uses producer-consumer pattern and asyncio.gather
     """
-    
+
     def __init__(
         self,
         extractor: DataExtractor,
         repository: GeoRepository,
-        batch_size: int = 1000
+        enable_parallel: bool = True,
+        batch_size: int = 1000,
+        queue_depth: int = 10,
     ):
         """
         Initialize the use case.
-        
+
         Args:
             extractor: Data source (implements DataExtractor port)
             repository: Data storage (implements GeoRepository port)
-            batch_size: How many items to save at once
+            enable_parallel: Enable parallel processing (default True)
+            batch_size: How many items per batch
+            queue_depth: Max batches to buffer in queue
         """
         self.extractor = extractor
         self.repository = repository
+        self.enable_parallel = enable_parallel
         self.batch_size = batch_size
-    
-    async def execute(self) -> None:
+        self.queue_depth = queue_depth
+
+    async def execute(
+        self,
+        entity_types: set[str] | None = None,
+    ) -> PipelineResult:
         """
-        Run the complete pipeline.
-        
-        1. Import all roads
-        2. Import all POIs
-        3. Import all zones
+        Run the pipeline for specified entity types.
+
+        Args:
+            entity_types: Set of types to process.
+                         None means all: {"roads", "pois", "zones", "segments"}
+
+        Returns:
+            PipelineResult with counts and duration.
         """
-        await self._import_roads()
-        await self._import_pois()
-        await self._import_zones()
-    
-    async def _import_roads(self) -> None:
-        """Import roads in batches."""
-        batch = []
-        
-        for road in self.extractor.extract_roads():
-            batch.append(road)
-            
-            if len(batch) >= self.batch_size:
-                await self.repository.save_roads(batch)
-                batch = []
-        
-        # Save remaining items
-        if batch:
-            await self.repository.save_roads(batch)
-    
-    async def _import_pois(self) -> None:
-        """Import POIs in batches."""
-        # Similar to _import_roads
-        ...
-    
-    async def _import_zones(self) -> None:
-        """Import zones in batches."""
-        # Similar to _import_roads
-        ...
+        types = entity_types or {"roads", "pois", "zones", "segments"}
+
+        if self.enable_parallel:
+            try:
+                return await self._execute_parallel(types)
+            except Exception:
+                # Fallback to sequential on failure
+                return await self._execute_sequential(types)
+
+        return await self._execute_sequential(types)
+
+    async def _process_with_queue(
+        self,
+        iterator: Iterator[T],
+        save_batch_fn: Callable[[list[T]], Awaitable[int]],
+    ) -> int:
+        """Process entities using producer-consumer pattern."""
+        batcher = AsyncBatcher(
+            iterator,
+            batch_size=self.batch_size,
+            max_queue_size=self.queue_depth,
+        )
+        return await batcher.run(save_batch_fn)
+
+    async def _execute_parallel(self, types: set[str]) -> PipelineResult:
+        """Parallel execution with concurrent entity processing."""
+        # Phase 1: Roads first (segments depend on them)
+        roads = []
+        if "roads" in types or "segments" in types:
+            roads = list(self.extractor.extract_roads())
+            if "roads" in types:
+                await self._process_with_queue(
+                    iter(roads),
+                    self.repository.save_roads_batch,
+                )
+
+        # Phase 2: Segments, POIs, Zones run concurrently
+        tasks = []
+        if "segments" in types and roads:
+            segments = split_roads_into_segments(roads)
+            tasks.append(self._process_with_queue(
+                iter(segments),
+                self.repository.save_segments_batch,
+            ))
+        if "pois" in types:
+            tasks.append(self._process_with_queue(
+                self.extractor.extract_pois(),
+                self.repository.save_pois_batch,
+            ))
+        if "zones" in types:
+            tasks.append(self._process_with_queue(
+                self.extractor.extract_zones(),
+                self.repository.save_zones_batch,
+            ))
+
+        # Run all tasks concurrently
+        await asyncio.gather(*tasks)
+        return PipelineResult(...)
 ```
 
 #### How It Works
@@ -272,13 +471,39 @@ The use case receives its dependencies (extractor, repository) from outside. Thi
 - It doesn't know if data goes to PostgreSQL or SQLite
 - It just knows the interfaces (ports)
 
-**Batching:**
-Instead of saving one road at a time, we batch them:
+**Producer-Consumer Pattern:**
+Instead of extract → wait → save → extract → wait → save:
 ```
-Collect 1000 roads → Save all at once → Collect next 1000 → Repeat
+Producer (extract):  [batch1] [batch2] [batch3] ...
+                        │        │        │
+                        ▼        ▼        ▼
+Queue (buffer):      [────────────────────────]
+                        │        │        │
+                        ▼        ▼        ▼
+Consumer (save):     [batch1] [batch2] [batch3] ...
 ```
 
-This is much faster than individual saves.
+Extraction and saving happen simultaneously!
+
+**Concurrent Entity Processing:**
+In parallel mode, independent entity types process concurrently:
+```python
+await asyncio.gather(
+    process_segments(),  # ─┐
+    process_pois(),      # ─┼─ All run at the same time
+    process_zones(),     # ─┘
+)
+```
+
+**Graceful Fallback:**
+If parallel mode fails, the use case automatically falls back to sequential mode:
+```python
+if self.enable_parallel:
+    try:
+        return await self._execute_parallel(types)
+    except Exception:
+        return await self._execute_sequential(types)  # Fallback
+```
 
 **Async/Await:**
 The use case uses async methods because database operations can be slow. This allows other work to happen while waiting for the database.
@@ -336,29 +561,67 @@ from application.use_cases import RunPipelineUseCase
 
 async def main():
     # 1. Create infrastructure implementations
-    
+
     # Data source (OSM file)
-    pbf_reader = PBFReader(settings.OSM_FILE_PATH)
+    pbf_reader = PBFReader(settings.osm_file_path)
     extractor = OSMExtractor(pbf_reader)  # Implements DataExtractor port
-    
+
     # Data storage (PostgreSQL)
-    pool = await create_pool(settings)
-    repository = PostgresWriter(pool)  # Implements GeoRepository port
-    
-    # 2. Create the use case with dependencies
-    pipeline = RunPipelineUseCase(
-        extractor=extractor,
-        repository=repository,
-        batch_size=settings.BATCH_SIZE
-    )
-    
-    # 3. Run it!
-    await pipeline.execute()
-    
-    print("Pipeline complete!")
+    async with create_pool(settings) as pool:
+        repository = PostgresWriter(pool, settings.batch_size)
+
+        # 2. Create the use case with dependencies
+        pipeline = RunPipelineUseCase(
+            extractor=extractor,
+            repository=repository,
+            enable_parallel=settings.enable_parallel_pipeline,  # Default: True
+            batch_size=settings.batch_size,
+            queue_depth=settings.parallel_queue_depth,
+        )
+
+        # 3. Run it!
+        result = await pipeline.execute()
+
+        print(f"Pipeline complete!")
+        print(f"  Roads: {result.roads_count}")
+        print(f"  POIs: {result.pois_count}")
+        print(f"  Zones: {result.zones_count}")
+        print(f"  Segments: {result.segments_count}")
+        print(f"  Duration: {result.duration_seconds}s")
 
 # Run the async main function
 asyncio.run(main())
+```
+
+### Running Specific Entity Types
+
+You can process only specific entity types:
+
+```python
+# Only roads and POIs (no zones or segments)
+result = await pipeline.execute(entity_types={"roads", "pois"})
+
+# Only zones
+result = await pipeline.execute(entity_types={"zones"})
+```
+
+### Disabling Parallel Mode
+
+For debugging or simpler environments:
+
+```bash
+# Via environment variable
+ENABLE_PARALLEL_PIPELINE=false python -m main
+```
+
+Or programmatically:
+
+```python
+pipeline = RunPipelineUseCase(
+    extractor=extractor,
+    repository=repository,
+    enable_parallel=False,  # Sequential mode
+)
 ```
 
 ## Testing the Application Layer

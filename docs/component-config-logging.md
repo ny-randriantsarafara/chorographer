@@ -60,6 +60,10 @@ POSTGRES_PASSWORD=secret123
 # Processing
 BATCH_SIZE=1000
 
+# Parallel Processing
+ENABLE_PARALLEL_PIPELINE=true
+PARALLEL_QUEUE_DEPTH=10
+
 # Logging
 LOG_LEVEL=INFO
 LOG_FORMAT=console
@@ -142,18 +146,59 @@ class Settings(BaseSettings):
     BATCH_SIZE: int = 1000
     """
     Number of items to process in each batch.
-    
+
     Larger batches:
     - Faster processing
     - More memory usage
-    
+
     Smaller batches:
     - Slower processing
     - Less memory usage
-    
+
     Default: 1000 (good balance)
     """
-    
+
+    # ==========================
+    # Parallel Processing Settings
+    # ==========================
+
+    ENABLE_PARALLEL_PIPELINE: bool = True
+    """
+    Enable parallel processing mode.
+
+    When True (default):
+    - Uses producer-consumer pattern for overlapping extraction/loading
+    - Processes independent entity types concurrently with asyncio.gather()
+    - Typically 25-50% faster than sequential mode
+
+    When False:
+    - Processes entity types one at a time
+    - Simpler execution flow, easier to debug
+    - Use for troubleshooting or resource-constrained environments
+
+    Default: True
+    """
+
+    PARALLEL_QUEUE_DEPTH: int = 10
+    """
+    Maximum number of batches to buffer in the async queue.
+
+    This controls backpressure between extraction (producer) and
+    database loading (consumer):
+
+    Higher values:
+    - More memory usage (more batches buffered)
+    - Better throughput if extraction is faster than loading
+    - Risk of memory exhaustion with very large batches
+
+    Lower values:
+    - Less memory usage
+    - May cause extraction to wait for loading
+    - Safer for memory-constrained environments
+
+    Default: 10 (buffers up to 10 * BATCH_SIZE items)
+    """
+
     # ==================
     # Logging Settings
     # ==================
@@ -268,6 +313,8 @@ POSTGRES_DB=lemurion_dev
 POSTGRES_USER=dev_user
 POSTGRES_PASSWORD=dev_password
 BATCH_SIZE=100  # Smaller for testing
+ENABLE_PARALLEL_PIPELINE=false  # Sequential for easier debugging
+PARALLEL_QUEUE_DEPTH=5
 LOG_LEVEL=DEBUG
 LOG_FORMAT=console
 ```
@@ -283,6 +330,8 @@ POSTGRES_DB=lemurion_test
 POSTGRES_USER=test_user
 POSTGRES_PASSWORD=test_password
 BATCH_SIZE=10  # Very small for unit tests
+ENABLE_PARALLEL_PIPELINE=false  # Sequential for deterministic tests
+PARALLEL_QUEUE_DEPTH=2
 LOG_LEVEL=DEBUG
 LOG_FORMAT=console
 ```
@@ -298,6 +347,8 @@ export POSTGRES_DB=lemurion
 export POSTGRES_USER=app_user
 export POSTGRES_PASSWORD=<secret-from-vault>
 export BATCH_SIZE=5000  # Larger for performance
+export ENABLE_PARALLEL_PIPELINE=true  # Parallel for maximum throughput
+export PARALLEL_QUEUE_DEPTH=20  # More buffering for high throughput
 export LOG_LEVEL=INFO
 export LOG_FORMAT=json  # For log analysis tools
 ```

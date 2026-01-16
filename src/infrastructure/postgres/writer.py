@@ -8,7 +8,7 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
 from application.ports.repository import GeoRepository
-from domain import Road, POI, Zone, Segment
+from domain import POI, Road, Segment, Zone
 from infrastructure.logging import get_logger
 
 logger = get_logger(__name__)
@@ -55,6 +55,26 @@ class PostgresWriter(GeoRepository):
         self.pool = pool
         self.batch_size = batch_size
 
+    def _road_to_tuple(self, road: Road) -> tuple[Any, ...]:
+        """Convert Road entity to insert tuple."""
+        return (
+            road.osm_id,
+            _coords_to_wkt_linestring(road.geometry),
+            road.road_type.value,
+            road.surface.value if road.surface else None,
+            road.smoothness.value if road.smoothness else None,
+            road.name,
+            road.lanes,
+            road.oneway,
+            road.max_speed,
+            road.length,
+            road.surface_factor,
+            road.smoothness_factor,
+            road.effective_speed_kmh,
+            road.penalized_speed_kmh,
+            json.dumps(road.tags) if road.tags else None,
+        )
+
     async def save_roads(self, roads: Iterable[Road]) -> int:
         """Batch insert roads into database.
 
@@ -69,23 +89,7 @@ class PostgresWriter(GeoRepository):
 
         async with self.pool.connection() as conn:
             for road in roads:
-                batch.append((
-                    road.osm_id,
-                    _coords_to_wkt_linestring(road.geometry),
-                    road.road_type.value,
-                    road.surface.value if road.surface else None,
-                    road.smoothness.value if road.smoothness else None,
-                    road.name,
-                    road.lanes,
-                    road.oneway,
-                    road.max_speed,
-                    road.length,
-                    road.surface_factor,
-                    road.smoothness_factor,
-                    road.effective_speed_kmh,
-                    road.penalized_speed_kmh,
-                    json.dumps(road.tags) if road.tags else None,
-                ))
+                batch.append(self._road_to_tuple(road))
 
                 if len(batch) >= self.batch_size:
                     count += await self._insert_roads_batch(conn, batch)
@@ -97,6 +101,24 @@ class PostgresWriter(GeoRepository):
 
         logger.info("Written roads", count=count)
         return count
+
+    async def save_roads_batch(self, roads: list[Road]) -> int:
+        """Insert a pre-batched list of roads.
+
+        Used by AsyncBatcher for parallel processing.
+
+        Args:
+            roads: List of Road entities (already batched)
+
+        Returns:
+            Number of roads saved
+        """
+        if not roads:
+            return 0
+
+        async with self.pool.connection() as conn:
+            batch = [self._road_to_tuple(road) for road in roads]
+            return await self._insert_roads_batch(conn, batch)
 
     async def _insert_roads_batch(
         self,
@@ -135,6 +157,33 @@ class PostgresWriter(GeoRepository):
         await conn.commit()
         return len(batch)
 
+    def _poi_to_tuple(self, poi: POI) -> tuple[Any, ...]:
+        """Convert POI entity to insert tuple."""
+        address_json = None
+        if poi.address:
+            address_json = json.dumps({
+                "street": poi.address.street,
+                "housenumber": poi.address.housenumber,
+                "city": poi.address.city,
+                "postcode": poi.address.postcode,
+            })
+
+        return (
+            poi.osm_id,
+            _coords_to_wkt_point(poi.coordinates),
+            poi.category.value,
+            poi.subcategory,
+            poi.name,
+            address_json,
+            poi.phone,
+            poi.opening_hours.raw if poi.opening_hours else None,
+            poi.price_range,
+            poi.website,
+            poi.is_24_7,
+            poi.formatted_address,
+            json.dumps(poi.tags) if poi.tags else None,
+        )
+
     async def save_pois(self, pois: Iterable[POI]) -> int:
         """Batch insert POIs into database.
 
@@ -149,30 +198,7 @@ class PostgresWriter(GeoRepository):
 
         async with self.pool.connection() as conn:
             for poi in pois:
-                address_json = None
-                if poi.address:
-                    address_json = json.dumps({
-                        "street": poi.address.street,
-                        "housenumber": poi.address.housenumber,
-                        "city": poi.address.city,
-                        "postcode": poi.address.postcode,
-                    })
-
-                batch.append((
-                    poi.osm_id,
-                    _coords_to_wkt_point(poi.coordinates),
-                    poi.category.value,
-                    poi.subcategory,
-                    poi.name,
-                    address_json,
-                    poi.phone,
-                    poi.opening_hours.raw if poi.opening_hours else None,
-                    poi.price_range,
-                    poi.website,
-                    poi.is_24_7,
-                    poi.formatted_address,
-                    json.dumps(poi.tags) if poi.tags else None,
-                ))
+                batch.append(self._poi_to_tuple(poi))
 
                 if len(batch) >= self.batch_size:
                     count += await self._insert_pois_batch(conn, batch)
@@ -183,6 +209,24 @@ class PostgresWriter(GeoRepository):
 
         logger.info("Written POIs", count=count)
         return count
+
+    async def save_pois_batch(self, pois: list[POI]) -> int:
+        """Insert a pre-batched list of POIs.
+
+        Used by AsyncBatcher for parallel processing.
+
+        Args:
+            pois: List of POI entities (already batched)
+
+        Returns:
+            Number of POIs saved
+        """
+        if not pois:
+            return 0
+
+        async with self.pool.connection() as conn:
+            batch = [self._poi_to_tuple(poi) for poi in pois]
+            return await self._insert_pois_batch(conn, batch)
 
     async def _insert_pois_batch(
         self,
@@ -218,6 +262,21 @@ class PostgresWriter(GeoRepository):
         await conn.commit()
         return len(batch)
 
+    def _zone_to_tuple(self, zone: Zone) -> tuple[Any, ...]:
+        """Convert Zone entity to insert tuple."""
+        return (
+            zone.osm_id,
+            _coords_to_wkt_polygon(zone.geometry),
+            zone.zone_type,
+            zone.name,
+            zone.malagasy_name,
+            zone.iso_code,
+            zone.population,
+            zone.area,
+            _coords_to_wkt_point(zone.centroid),
+            json.dumps(zone.tags) if zone.tags else None,
+        )
+
     async def save_zones(self, zones: Iterable[Zone]) -> int:
         """Batch insert zones into database.
 
@@ -232,18 +291,7 @@ class PostgresWriter(GeoRepository):
 
         async with self.pool.connection() as conn:
             for zone in zones:
-                batch.append((
-                    zone.osm_id,
-                    _coords_to_wkt_polygon(zone.geometry),
-                    zone.zone_type,
-                    zone.name,
-                    zone.malagasy_name,
-                    zone.iso_code,
-                    zone.population,
-                    zone.area,
-                    _coords_to_wkt_point(zone.centroid),
-                    json.dumps(zone.tags) if zone.tags else None,
-                ))
+                batch.append(self._zone_to_tuple(zone))
 
                 if len(batch) >= self.batch_size:
                     count += await self._insert_zones_batch(conn, batch)
@@ -254,6 +302,24 @@ class PostgresWriter(GeoRepository):
 
         logger.info("Written zones", count=count)
         return count
+
+    async def save_zones_batch(self, zones: list[Zone]) -> int:
+        """Insert a pre-batched list of zones.
+
+        Used by AsyncBatcher for parallel processing.
+
+        Args:
+            zones: List of Zone entities (already batched)
+
+        Returns:
+            Number of zones saved
+        """
+        if not zones:
+            return 0
+
+        async with self.pool.connection() as conn:
+            batch = [self._zone_to_tuple(zone) for zone in zones]
+            return await self._insert_zones_batch(conn, batch)
 
     async def _insert_zones_batch(
         self,
@@ -285,6 +351,25 @@ class PostgresWriter(GeoRepository):
         await conn.commit()
         return len(batch)
 
+    def _segment_to_tuple(self, segment: Segment) -> tuple[Any, ...]:
+        """Convert Segment entity to insert tuple."""
+        return (
+            segment.id,
+            segment.road_id,
+            _coords_to_wkt_linestring([segment.start, segment.end]),
+            _coords_to_wkt_point(segment.start),
+            _coords_to_wkt_point(segment.end),
+            segment.length,
+            segment.penalty.surface_factor,
+            segment.penalty.smoothness_factor,
+            segment.penalty.rainy_season_factor,
+            segment.oneway,
+            segment.base_speed,
+            segment.effective_speed_kmh,
+            segment.travel_time_seconds,
+            segment.cost,
+        )
+
     async def save_segments(self, segments: Iterable[Segment]) -> int:
         """Batch insert segments into database.
 
@@ -299,22 +384,7 @@ class PostgresWriter(GeoRepository):
 
         async with self.pool.connection() as conn:
             for segment in segments:
-                batch.append((
-                    segment.id,
-                    segment.road_id,
-                    _coords_to_wkt_linestring([segment.start, segment.end]),
-                    _coords_to_wkt_point(segment.start),
-                    _coords_to_wkt_point(segment.end),
-                    segment.length,
-                    segment.penalty.surface_factor,
-                    segment.penalty.smoothness_factor,
-                    segment.penalty.rainy_season_factor,
-                    segment.oneway,
-                    segment.base_speed,
-                    segment.effective_speed_kmh,
-                    segment.travel_time_seconds,
-                    segment.cost,
-                ))
+                batch.append(self._segment_to_tuple(segment))
 
                 if len(batch) >= self.batch_size:
                     count += await self._insert_segments_batch(conn, batch)
@@ -325,6 +395,24 @@ class PostgresWriter(GeoRepository):
 
         logger.info("Written segments", count=count)
         return count
+
+    async def save_segments_batch(self, segments: list[Segment]) -> int:
+        """Insert a pre-batched list of segments.
+
+        Used by AsyncBatcher for parallel processing.
+
+        Args:
+            segments: List of Segment entities (already batched)
+
+        Returns:
+            Number of segments saved
+        """
+        if not segments:
+            return 0
+
+        async with self.pool.connection() as conn:
+            batch = [self._segment_to_tuple(segment) for segment in segments]
+            return await self._insert_segments_batch(conn, batch)
 
     async def _insert_segments_batch(
         self,

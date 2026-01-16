@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # Processing
     batch_size: int = 1000
 
+    # Parallel processing
+    enable_parallel_pipeline: bool = True
+    parallel_queue_depth: int = 10
+
     # Logging
     log_level: str = "INFO"
     log_format: str = "console"  # "json" or "console"

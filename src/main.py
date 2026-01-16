@@ -27,7 +27,13 @@ async def run() -> None:
         repository = PostgresWriter(pool, settings.batch_size)
 
         # Application use case
-        pipeline = RunPipelineUseCase(extractor, repository)
+        pipeline = RunPipelineUseCase(
+            extractor,
+            repository,
+            enable_parallel=settings.enable_parallel_pipeline,
+            batch_size=settings.batch_size,
+            queue_depth=settings.parallel_queue_depth,
+        )
         result = await pipeline.execute()
 
         logger.info("Pipeline complete", **asdict(result))

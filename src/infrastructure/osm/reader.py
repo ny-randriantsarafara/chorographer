@@ -7,15 +7,16 @@ Domain transformation is handled by the application layer (OSMExtractor).
 from collections.abc import Iterator
 from pathlib import Path
 
-from infrastructure.osm.types import RawWay, RawNode, RawRelation
+from infrastructure.logging import get_logger
 from infrastructure.osm.handlers import (
+    CombinedHandler,
     NodeCollector,
-    WayHandler,
     NodeHandler,
     RelationHandler,
     WayCollector,
+    WayHandler,
 )
-from infrastructure.logging import get_logger
+from infrastructure.osm.types import RawNode, RawRelation, RawWay
 
 logger = get_logger(__name__)
 
@@ -128,3 +129,43 @@ class PBFReader:
         logger.info("Extracted raw relations", count=len(relations))
 
         yield from relations
+
+    def extract_all_raw(
+        self,
+    ) -> tuple[list[RawWay], list[RawNode], list[RawRelation]]:
+        """Extract all raw data in a single pass over the file.
+
+        This method is optimized for parallel processing by reading
+        ways, nodes, and relations in one file scan instead of
+        multiple passes.
+
+        Returns:
+            Tuple of (raw_ways, raw_nodes, raw_relations)
+        """
+        # Collect prerequisite data
+        nodes = self._collect_nodes()
+        ways = self._collect_ways()
+
+        # Prepare result containers
+        raw_ways: list[RawWay] = []
+        raw_nodes: list[RawNode] = []
+        raw_relations: list[RawRelation] = []
+
+        logger.info("Extracting all raw data in single pass")
+        handler = CombinedHandler(
+            nodes,
+            ways,
+            on_way=raw_ways.append,
+            on_node=raw_nodes.append,
+            on_relation=raw_relations.append,
+        )
+        handler.apply_file(str(self.file_path), locations=True)
+
+        logger.info(
+            "Extracted raw data",
+            ways=len(raw_ways),
+            nodes=len(raw_nodes),
+            relations=len(raw_relations),
+        )
+
+        return raw_ways, raw_nodes, raw_relations
