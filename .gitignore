@@ -40,6 +40,7 @@ htmlcov/
 # OSM data files
 *.pbf
 *.osm
+data/*.json
 
 # Environment
 .env

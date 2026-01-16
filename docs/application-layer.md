@@ -605,6 +605,12 @@ result = await pipeline.execute(entity_types={"roads", "pois"})
 result = await pipeline.execute(entity_types={"zones"})
 ```
 
+From the CLI, use `--entity-type` (repeat or use commas):
+
+```bash
+python -m main --entity-type roads --entity-type pois,zones
+```
+
 ### Disabling Parallel Mode
 
 For debugging or simpler environments:
