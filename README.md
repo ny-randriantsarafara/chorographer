@@ -53,6 +53,12 @@ Or from the repository root:
 PYTHONPATH=src python -m main
 ```
 
+Filter entity types from the CLI (repeat or use commas):
+
+```bash
+python -m main --entity-type roads --entity-type pois,zones
+```
+
 ## Configuration
 
 Configure via environment variables or a local `.env` file:

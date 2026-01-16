@@ -111,7 +111,7 @@ class RunPipelineUseCase:
         Returns:
             PipelineResult with counts and duration.
         """
-        types = entity_types or {"roads", "pois", "zones", "segments"}
+        types = entity_types or {"pois", "zones"}
 
         if self.enable_parallel:
             try:
@@ -269,7 +269,8 @@ class RunPipelineUseCase:
 
             for name, result in zip(task_names, results, strict=True):
                 if isinstance(result, Exception):
-                    logger.error(f"Failed to process {name}", error=str(result))
+                    logger.error(
+                        f"Failed to process {name}", error=str(result))
                     raise result
 
                 if name == "segments":
