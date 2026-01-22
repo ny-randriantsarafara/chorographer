@@ -229,7 +229,7 @@ Infrastructure ──▶ Application ──▶ Domain
 #### Road
 | Field | Type | Source | Description |
 |-------|------|--------|-------------|
-| `osm_id` | int | OSM | Unique identifier for versioning |
+| `id` | int | OSM | Unique identifier for versioning |
 | `geometry` | list[Coordinates] | OSM | LineString coordinates |
 | `road_type` | RoadType | OSM `highway` | motorway, trunk, primary, secondary, tertiary, residential, track, path |
 | `surface` | Surface | OSM `surface` | asphalt, paved, concrete, gravel, dirt, sand, unpaved, ground |
@@ -243,7 +243,7 @@ Infrastructure ──▶ Application ──▶ Domain
 #### POI (Point of Interest)
 | Field | Type | Source | Description |
 |-------|------|--------|-------------|
-| `osm_id` | int | OSM | Unique identifier |
+| `id` | int | OSM | Unique identifier |
 | `coordinates` | Coordinates | OSM | Location |
 | `category` | POICategory | OSM | transport, food, lodging, services, health, education, government |
 | `subcategory` | str | OSM `amenity`/`shop` | fuel, restaurant, hotel, pharmacy, etc. |
@@ -258,20 +258,21 @@ Infrastructure ──▶ Application ──▶ Domain
 #### Zone (Administrative Boundary)
 | Field | Type | Source | Description |
 |-------|------|--------|-------------|
-| `osm_id` | int | OSM | Unique identifier |
+| `id` | int | OSM | Unique identifier |
 | `geometry` | list[Coordinates] | OSM | Polygon boundary |
 | `zone_type` | str | OSM `admin_level` | country, region, district, commune, fokontany |
 | `name` | str | OSM `name` | Zone name |
-| `malagasy_name` | str \| None | OSM `name:mg` | Malagasy name |
 | `iso_code` | str \| None | OSM `ISO3166-2` | ISO code (e.g., MG-A) |
 | `population` | int \| None | OSM/scraped | Population count |
+| `level` | int | derived | Hierarchy level (0-4) |
+| `parent_zone_id` | int \| None | derived | Parent zone ID |
 | `tags` | dict[str, str] | OSM | Raw OSM tags |
 
 #### Segment (for routing graph)
 | Field | Type | Source | Description |
 |-------|------|--------|-------------|
 | `id` | int | derived | Unique segment ID |
-| `road_id` | int | derived | Parent road OSM ID |
+| `road_id` | int | derived | Parent road ID |
 | `start` | Coordinates | derived | Start node |
 | `end` | Coordinates | derived | End node |
 | `length` | float | computed | Segment length in meters |
@@ -441,10 +442,10 @@ alembic revision -m "add segments table"
 **Tables:**
 - `roads` - LineString geometries, GIST indexed
 - `pois` - Point geometries, GIST indexed
-- `zones` - Polygon geometries, GIST indexed
+- `zones` - MultiPolygon geometries, GIST indexed
 
 All tables include:
-- `osm_id` (primary key)
+- `id` (primary key, from OSM)
 - `geometry` (PostGIS)
 - `tags` (JSONB for raw OSM data)
 - `created_at`, `updated_at` timestamps

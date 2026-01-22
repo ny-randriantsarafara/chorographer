@@ -433,7 +433,7 @@ class OSMExtractor(DataExtractor):
         max_speed = self._parse_maxspeed(tags.get("maxspeed"))
         
         return Road(
-            osm_id=raw_way.id,
+            id=raw_way.id,
             geometry=geometry,
             road_type=road_type,
             surface=surface,
@@ -482,7 +482,7 @@ def extract_pois(self) -> Iterator[POI]:
     for raw_node in self.reader.nodes():
         if self._is_poi(raw_node.tags):
             poi = self._convert_to_poi(
-                osm_id=raw_node.id,
+                id=raw_node.id,
                 coordinates=Coordinates(raw_node.lat, raw_node.lon),
                 tags=raw_node.tags
             )
@@ -498,7 +498,7 @@ def _is_poi(self, tags: dict) -> bool:
 
 def _convert_to_poi(
     self,
-    osm_id: int,
+    id: int,
     coordinates: Coordinates,
     tags: dict
 ) -> POI:
@@ -515,7 +515,7 @@ def _convert_to_poi(
     website = tags.get("website")
     
     return POI(
-        osm_id=osm_id,
+        id=id,
         coordinates=coordinates,
         category=category,
         subcategory=subcategory,
@@ -610,7 +610,7 @@ Here's how a road goes from .pbf file to Road entity:
 
 5. Final Result:
    Road(
-       osm_id=12345,
+       id=12345,
        geometry=[
            Coordinates(lat=-18.8792, lon=47.5079),
            Coordinates(lat=-18.8800, lon=47.5090),

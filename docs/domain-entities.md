@@ -14,7 +14,7 @@ A Road represents any kind of path you can drive or walk on - from major highway
 
 | Field | What It Means | Example |
 |-------|---------------|---------|
-| `osm_id` | Unique number from OpenStreetMap | 123456 |
+| `id` | Unique number from OpenStreetMap | 123456 |
 | `geometry` | List of coordinates that draw the road on a map | [(lat, lon), (lat, lon), ...] |
 | `road_type` | What kind of road it is | Primary highway, residential street, dirt track |
 | `surface` | What the road is made of | Asphalt, gravel, dirt, sand |
@@ -37,7 +37,7 @@ Roads are the foundation of route planning. We need to know:
 
 ```python
 road = Road(
-    osm_id=987654,
+    id=987654,
     geometry=[
         Coordinates(lat=-18.8792, lon=47.5079),
         Coordinates(lat=-18.8800, lon=47.5090),
@@ -64,7 +64,7 @@ A POI is any place that might be useful for travelers - gas stations, hotels, re
 
 | Field | What It Means | Example |
 |-------|---------------|---------|
-| `osm_id` | Unique number from OpenStreetMap | 456789 |
+| `id` | Unique number from OpenStreetMap | 456789 |
 | `coordinates` | Exact location | (-18.8792, 47.5079) |
 | `category` | General type of place | Transport, Food, Lodging, Health |
 | `subcategory` | Specific type | fuel, restaurant, hotel, pharmacy |
@@ -74,6 +74,11 @@ A POI is any place that might be useful for travelers - gas stations, hotels, re
 | `opening_hours` | When the place is open | "Mo-Fr 08:00-18:00" |
 | `price_range` | How expensive (1-4 scale) | 2 (moderate) |
 | `website` | Web address | "https://example.com" |
+| `name_normalized` | Normalized name for search | "total gas station" |
+| `search_text` | Search string built from name/brand/etc. | "Total Gas Station Total" |
+| `search_text_normalized` | Normalized search text | "total gas station total" |
+| `has_name` | Whether the POI has a name | True |
+| `popularity` | Ranking score (higher = more popular) | 0 |
 | `tags` | All the raw data from OpenStreetMap | {"amenity": "fuel", "brand": "Total"} |
 
 #### Why POIs are Important
@@ -90,7 +95,7 @@ POIs answer these questions.
 
 ```python
 poi = POI(
-    osm_id=111222,
+    id=111222,
     coordinates=Coordinates(lat=-18.9100, lon=47.5200),
     category=POICategory.TRANSPORT,
     subcategory="fuel",
@@ -116,14 +121,17 @@ A Zone is an administrative boundary - like a country, region, district, or town
 
 | Field | What It Means | Example |
 |-------|---------------|---------|
-| `osm_id` | Unique number from OpenStreetMap | 789012 |
+| `id` | Unique number from OpenStreetMap | 789012 |
 | `geometry` | List of coordinates that draw the boundary | [(lat, lon), (lat, lon), ...] |
 | `zone_type` | What level of government | country, region, district, commune, fokontany |
 | `name` | Official name | "Analamanga" |
-| `malagasy_name` | Name in Malagasy language | "Analamanga" |
 | `iso_code` | International code | "MG-T" |
 | `population` | How many people live there | 3,618,128 |
+| `level` | Hierarchy level (0-4) | 1 |
+| `parent_zone_id` | Parent zone ID (if any) | 1 |
 | `tags` | All the raw data from OpenStreetMap | {"admin_level": "4", "name": "Analamanga"} |
+
+Localized names like `name:mg` remain available in `tags` if you need them.
 
 #### Zone Types Explained
 
@@ -147,7 +155,7 @@ Zones help us:
 
 ```python
 zone = Zone(
-    osm_id=445566,
+    id=445566,
     geometry=[
         Coordinates(lat=-18.7000, lon=47.3000),
         Coordinates(lat=-18.7000, lon=47.7000),
@@ -157,7 +165,8 @@ zone = Zone(
     ],
     zone_type="region",
     name="Analamanga",
-    malagasy_name="Analamanga",
+    level=1,
+    parent_zone_id=1,
     iso_code="MG-T",
     population=3618128,
     tags={"admin_level": "4", "name": "Analamanga"}
@@ -246,9 +255,9 @@ segment = Segment(
 ## Key Differences: Entity vs Value Object
 
 **Entity (like Road):**
-- Has a unique identity (osm_id)
+- Has a unique identity (id)
 - Can change over time (surface might be repaired)
-- Two roads are the same if they have the same osm_id
+- Two roads are the same if they have the same id
 
 **Value Object (like Coordinates):**
 - No unique identity

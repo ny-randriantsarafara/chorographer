@@ -576,7 +576,7 @@ Very detailed information for diagnosing problems.
 
 **Example:**
 ```python
-logger.debug("validating_road", osm_id=12345, tags=tags)
+logger.debug("validating_road", id=12345, tags=tags)
 ```
 
 ### INFO
@@ -603,7 +603,7 @@ Something unexpected happened, but the application can continue.
 
 **Example:**
 ```python
-logger.warning("missing_optional_data", osm_id=12345, field="name")
+logger.warning("missing_optional_data", id=12345, field="name")
 ```
 
 ### ERROR

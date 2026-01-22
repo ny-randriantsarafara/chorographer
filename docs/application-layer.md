@@ -640,14 +640,14 @@ class FakeExtractor(DataExtractor):
     
     def extract_roads(self):
         # Return fake test data
-        yield Road(osm_id=1, road_type=RoadType.PRIMARY, ...)
-        yield Road(osm_id=2, road_type=RoadType.SECONDARY, ...)
+        yield Road(id=1, road_type=RoadType.PRIMARY, ...)
+        yield Road(id=2, road_type=RoadType.SECONDARY, ...)
     
     def extract_pois(self):
-        yield POI(osm_id=100, category=POICategory.FOOD, ...)
+        yield POI(id=100, category=POICategory.FOOD, ...)
     
     def extract_zones(self):
-        yield Zone(osm_id=200, zone_type="region", ...)
+        yield Zone(id=200, zone_type="region", ...)
 
 
 class FakeRepository(GeoRepository):
@@ -692,6 +692,7 @@ The Application Layer defines what it needs (ports). The Infrastructure Layer pr
 ### 2. Single Responsibility
 Each use case has one clear purpose:
 - RunPipelineUseCase: Import data
+- ComputeZoneHierarchyUseCase: Build zone parent relationships after import
 - (Future) FindNearbyPOIsUseCase: Search for POIs
 - (Future) CalculateRouteUseCase: Find best route
 

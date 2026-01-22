@@ -100,7 +100,7 @@ from domain.value_objects import Coordinates, RoadPenalty
 
 # Create a road
 road = Road(
-    osm_id=12345,
+    id=12345,
     geometry=[
         Coordinates(lat=-18.8792, lon=47.5079),
         Coordinates(lat=-18.8800, lon=47.5090)

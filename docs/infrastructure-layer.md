@@ -172,7 +172,7 @@ class PostgresWriter(GeoRepository):
             for road in roads:
                 await conn.execute(
                     "INSERT INTO roads (...) VALUES (...)",
-                    [road.osm_id, road.name, ...]
+                    [road.id, road.name, ...]
                 )
 ```
 

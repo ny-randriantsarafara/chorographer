@@ -310,7 +310,7 @@ Here's a complete example showing how multiple enums describe a road:
 # - Asphalt surface
 # - Bad condition (many potholes from weather)
 route = Road(
-    osm_id=123456,
+    id=123456,
     road_type=RoadType.PRIMARY,
     surface=Surface.ASPHALT,
     smoothness=Smoothness.BAD,

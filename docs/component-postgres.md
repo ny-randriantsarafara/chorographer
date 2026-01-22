@@ -182,13 +182,13 @@ class PostgresWriter(GeoRepository):
                 await cur.executemany(
                     """
                     INSERT INTO roads (
-                        osm_id, geometry, road_type, surface,
+                        id, geometry, road_type, surface,
                         smoothness, name, lanes, oneway, max_speed, tags
                     ) VALUES (
                         %s, ST_GeomFromText(%s, 4326), %s, %s,
                         %s, %s, %s, %s, %s, %s
                     )
-                    ON CONFLICT (osm_id) DO UPDATE SET
+                    ON CONFLICT (id) DO UPDATE SET
                         geometry = EXCLUDED.geometry,
                         road_type = EXCLUDED.road_type,
                         surface = EXCLUDED.surface,
@@ -222,7 +222,7 @@ class PostgresWriter(GeoRepository):
         wkt = f"LINESTRING({coords_str})"
         
         return (
-            road.osm_id,
+            road.id,
             wkt,  # PostGIS will convert this to geometry
             road.road_type.value,
             road.surface.value,
@@ -264,12 +264,12 @@ The number 4326 means "WGS84" - the standard GPS coordinate system:
 
 ```sql
 INSERT INTO roads (...) VALUES (...)
-ON CONFLICT (osm_id) DO UPDATE SET ...
+ON CONFLICT (id) DO UPDATE SET ...
 ```
 
 This means:
 - Try to insert the road
-- If a road with this osm_id already exists, update it instead
+- If a road with this id already exists, update it instead
 - This is called an "upsert" (insert or update)
 
 Useful when re-importing OSM data - we update existing roads instead of failing.
@@ -289,14 +289,17 @@ async def save_pois(self, pois: List[POI]) -> None:
             await cur.executemany(
                 """
                 INSERT INTO pois (
-                    osm_id, geometry, category, subcategory,
+                    id, geometry, category, subcategory,
                     name, address, phone, opening_hours,
-                    website, tags
+                    price_range, website,
+                    name_normalized, search_text, search_text_normalized,
+                    has_name, popularity, tags
                 ) VALUES (
                     %s, ST_GeomFromText(%s, 4326), %s, %s,
+                    %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s
                 )
-                ON CONFLICT (osm_id) DO UPDATE SET
+                ON CONFLICT (id) DO UPDATE SET
                     geometry = EXCLUDED.geometry,
                     category = EXCLUDED.category,
                     subcategory = EXCLUDED.subcategory,
@@ -304,7 +307,13 @@ async def save_pois(self, pois: List[POI]) -> None:
                     address = EXCLUDED.address,
                     phone = EXCLUDED.phone,
                     opening_hours = EXCLUDED.opening_hours,
+                    price_range = EXCLUDED.price_range,
                     website = EXCLUDED.website,
+                    name_normalized = EXCLUDED.name_normalized,
+                    search_text = EXCLUDED.search_text,
+                    search_text_normalized = EXCLUDED.search_text_normalized,
+                    has_name = EXCLUDED.has_name,
+                    popularity = EXCLUDED.popularity,
                     tags = EXCLUDED.tags,
                     updated_at = CURRENT_TIMESTAMP
                 """,
@@ -328,7 +337,7 @@ def _poi_to_db_row(self, poi: POI) -> tuple:
         }
     
     return (
-        poi.osm_id,
+        poi.id,
         wkt,
         poi.category.value,
         poi.subcategory,
@@ -336,7 +345,13 @@ def _poi_to_db_row(self, poi: POI) -> tuple:
         address_json,
         poi.phone,
         poi.opening_hours,
+        poi.price_range,
         poi.website,
+        poi.name_normalized,
+        poi.search_text,
+        poi.search_text_normalized,
+        poi.has_name,
+        poi.popularity,
         poi.tags
     )
 ```
@@ -356,17 +371,18 @@ async def save_zones(self, zones: List[Zone]) -> None:
             await cur.executemany(
                 """
                 INSERT INTO zones (
-                    osm_id, geometry, zone_type, name,
-                    malagasy_name, iso_code, population, tags
+                    id, geometry, zone_type, name,
+                    level, parent_zone_id, iso_code, population, tags
                 ) VALUES (
-                    %s, ST_GeomFromText(%s, 4326), %s, %s,
-                    %s, %s, %s, %s
+                    %s, ST_Multi(ST_GeomFromText(%s, 4326)), %s, %s,
+                    %s, %s, %s, %s, %s
                 )
-                ON CONFLICT (osm_id) DO UPDATE SET
+                ON CONFLICT (id) DO UPDATE SET
                     geometry = EXCLUDED.geometry,
                     zone_type = EXCLUDED.zone_type,
                     name = EXCLUDED.name,
-                    malagasy_name = EXCLUDED.malagasy_name,
+                    level = EXCLUDED.level,
+                    parent_zone_id = EXCLUDED.parent_zone_id,
                     iso_code = EXCLUDED.iso_code,
                     population = EXCLUDED.population,
                     tags = EXCLUDED.tags,
@@ -386,11 +402,12 @@ def _zone_to_db_row(self, zone: Zone) -> tuple:
     wkt = f"POLYGON(({coords_str}))"
     
     return (
-        zone.osm_id,
+        zone.id,
         wkt,
         zone.zone_type,
         zone.name,
-        zone.malagasy_name,
+        zone.level,
+        zone.parent_zone_id,
         zone.iso_code,
         zone.population,
         zone.tags
@@ -435,12 +452,12 @@ Benefits:
 - Can rollback if something goes wrong
 - Team members get same schema automatically
 
-### Initial Schema Migration
+### Base Schema Migration
 
 ```python
 # migrations/versions/20260115_0001_initial_schema.py
 """
-Initial database schema.
+Base database schema (shown with current column names).
 
 Creates tables for roads, pois, and zones.
 """
@@ -465,8 +482,7 @@ def upgrade():
     # Create roads table
     op.create_table(
         'roads',
-        sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
-        sa.Column('osm_id', sa.BigInteger, unique=True, nullable=False),
+        sa.Column('id', sa.BigInteger, primary_key=True),
         sa.Column('geometry', sa.String, nullable=False),  # PostGIS GEOMETRY
         sa.Column('road_type', sa.String(50), nullable=False),
         sa.Column('surface', sa.String(50), nullable=False),
@@ -495,8 +511,7 @@ def upgrade():
     # Create POIs table
     op.create_table(
         'pois',
-        sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
-        sa.Column('osm_id', sa.BigInteger, unique=True, nullable=False),
+        sa.Column('id', sa.BigInteger, primary_key=True),
         sa.Column('geometry', sa.String, nullable=False),  # PostGIS GEOMETRY
         sa.Column('category', sa.String(50), nullable=False),
         sa.Column('subcategory', sa.String(100), nullable=False),
@@ -504,6 +519,7 @@ def upgrade():
         sa.Column('address', JSONB, nullable=True),
         sa.Column('phone', sa.String(50), nullable=True),
         sa.Column('opening_hours', sa.String(255), nullable=True),
+        sa.Column('price_range', sa.Integer, nullable=True),
         sa.Column('website', sa.String(255), nullable=True),
         sa.Column('tags', JSONB, nullable=False),
         sa.Column('created_at', sa.DateTime, server_default=sa.func.now()),
@@ -523,12 +539,12 @@ def upgrade():
     # Create zones table
     op.create_table(
         'zones',
-        sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
-        sa.Column('osm_id', sa.BigInteger, unique=True, nullable=False),
+        sa.Column('id', sa.BigInteger, primary_key=True),
         sa.Column('geometry', sa.String, nullable=False),  # PostGIS GEOMETRY
         sa.Column('zone_type', sa.String(20), nullable=False),
         sa.Column('name', sa.String(255), nullable=False),
-        sa.Column('malagasy_name', sa.String(255), nullable=True),
+        sa.Column('level', sa.Integer, nullable=False),
+        sa.Column('parent_zone_id', sa.BigInteger, nullable=True),
         sa.Column('iso_code', sa.String(10), nullable=True),
         sa.Column('population', sa.Integer, nullable=True),
         sa.Column('tags', JSONB, nullable=False),
@@ -554,6 +570,8 @@ def downgrade():
     op.drop_table('pois')
     op.drop_table('roads')
 ```
+
+Later migrations add POI search fields, zone hierarchy indexes, and update zone geometry to MultiPolygon.
 
 ### Running Migrations
 
@@ -628,8 +646,7 @@ Always create GIST indexes on geometry columns!
 
 | Column | Type | Description |
 |--------|------|-------------|
-| id | Integer | Auto-incrementing primary key |
-| osm_id | BigInteger | OpenStreetMap ID (unique) |
+| id | BigInteger | OpenStreetMap ID (primary key) |
 | geometry | LINESTRING | Road path (PostGIS) |
 | road_type | String | motorway, primary, etc. |
 | surface | String | asphalt, gravel, etc. |
@@ -644,7 +661,6 @@ Always create GIST indexes on geometry columns!
 
 **Indexes:**
 - Primary key on `id`
-- Unique constraint on `osm_id`
 - GIST index on `geometry`
 
 ### POIs Table
@@ -653,19 +669,20 @@ Similar structure with:
 - `geometry` as POINT instead of LINESTRING
 - `category` and `subcategory` instead of road-specific fields
 - `address` as JSONB
-- `phone`, `opening_hours`, `website` fields
+- `phone`, `opening_hours`, `website`, `price_range` fields
+- Search fields: `name_normalized`, `search_text`, `search_text_normalized`, `has_name`, `popularity`
 
 ### Zones Table
 
 Similar structure with:
-- `geometry` as POLYGON instead of LINESTRING
+- `geometry` as MULTIPOLYGON instead of LINESTRING
 - `zone_type` (country, region, district, commune, fokontany)
-- `malagasy_name`, `iso_code`, `population`
+- `level`, `parent_zone_id`, `iso_code`, `population`
 
 ### Segments Table
 
 Routing segments derived from roads (split at intersections):
-- `road_id` references `roads.osm_id`
+- `road_id` references `roads.id`
 - `geometry` as LINESTRING with start/end points
 - `length`, `surface_factor`, `smoothness_factor`, `rainy_season_factor`
 - `base_speed`, `effective_speed_kmh`, `travel_time_seconds`, `cost`
@@ -678,7 +695,7 @@ Routing segments derived from roads (split at intersections):
 ### Find All Primary Roads
 
 ```sql
-SELECT osm_id, name, road_type
+SELECT id, name, road_type
 FROM roads
 WHERE road_type = 'primary';
 ```
