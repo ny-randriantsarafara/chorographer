@@ -8,10 +8,12 @@ the data source specifics (OSM, GeoJSON, etc.).
 from application.ports.extractor import DataExtractor
 from application.ports.repository import GeoRepository
 from application.use_cases.run_pipeline import RunPipelineUseCase, PipelineResult
+from application.use_cases.compute_zone_hierarchy import ComputeZoneHierarchyUseCase
 
 __all__ = [
     "DataExtractor",
     "GeoRepository",
     "RunPipelineUseCase",
     "PipelineResult",
+    "ComputeZoneHierarchyUseCase",
 ]

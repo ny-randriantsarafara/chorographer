@@ -49,7 +49,11 @@ def _parse_args() -> argparse.Namespace:
 
 
 async def run(entity_types: set[str] | None) -> None:
-    """Run the Chorographer ETL pipeline."""
+    """Run the Chorographer ETL pipeline.
+    
+    Args:
+        entity_types: Entity types to extract (None = all)
+    """
     settings = get_settings()
     setup_logging(settings.log_level, settings.log_format)
 
@@ -73,6 +77,12 @@ async def run(entity_types: set[str] | None) -> None:
         result = await pipeline.execute(entity_types=entity_types)
 
         logger.info("Pipeline complete", **asdict(result))
+        
+        # Optionally compute zone hierarchy
+        if compute_hierarchy:
+            hierarchy_use_case = ComputeZoneHierarchyUseCase(pool)
+            await hierarchy_use_case.execute()
+
 
 
 def main() -> None:
@@ -83,8 +93,4 @@ def main() -> None:
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
-    asyncio.run(run(entity_types))
-
-
-if __name__ == "__main__":
-    main()
+    asyncio.run(run(entity_types
