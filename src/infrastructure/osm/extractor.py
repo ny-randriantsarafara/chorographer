@@ -84,7 +84,7 @@ class OSMExtractor(DataExtractor):
         for raw_way in self.reader.read_raw_ways():
             highway = raw_way.tags.get("highway")
             if highway and highway in ROAD_HIGHWAY_TYPES:
-                road = transform_road(raw_way.osm_id, raw_way.tags, raw_way.coords)
+                road = transform_road(raw_way.id, raw_way.tags, raw_way.coords)
                 count += 1
                 yield road
 
@@ -105,7 +105,7 @@ class OSMExtractor(DataExtractor):
         for raw_node in self.reader.read_raw_nodes():
             if any(tag in raw_node.tags for tag in POI_TAGS):
                 poi = transform_poi(
-                    raw_node.osm_id,
+                    raw_node.id,
                     raw_node.tags,
                     raw_node.lon,
                     raw_node.lat,
@@ -130,7 +130,7 @@ class OSMExtractor(DataExtractor):
         for raw_relation in self.reader.read_raw_relations():
             if raw_relation.tags.get("boundary") == "administrative":
                 zone = transform_zone(
-                    raw_relation.osm_id,
+                    raw_relation.id,
                     raw_relation.tags,
                     raw_relation.coords,
                 )

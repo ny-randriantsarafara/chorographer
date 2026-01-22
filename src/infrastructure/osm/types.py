@@ -7,7 +7,7 @@ from dataclasses import dataclass
 class RawWay:
     """Raw OSM way data before transformation."""
 
-    osm_id: int
+    id: int
     tags: dict[str, str]
     coords: list[tuple[float, float]]  # (lon, lat) pairs
 
@@ -16,7 +16,7 @@ class RawWay:
 class RawNode:
     """Raw OSM node data before transformation."""
 
-    osm_id: int
+    id: int
     tags: dict[str, str]
     lon: float
     lat: float
@@ -26,6 +26,6 @@ class RawNode:
 class RawRelation:
     """Raw OSM relation data before transformation."""
 
-    osm_id: int
+    id: int
     tags: dict[str, str]
     coords: list[tuple[float, float]]  # outer ring (lon, lat) pairs

@@ -11,7 +11,7 @@ class POI:
     """Point of Interest entity.
 
     Attributes:
-        osm_id: Unique OSM identifier
+        id: Unique identifier (from OSM)
         coordinates: Location
         category: High-level category (transport, food, etc.)
         subcategory: Specific type (fuel, restaurant, etc.)
@@ -21,9 +21,14 @@ class POI:
         opening_hours: Business hours (optional)
         price_range: 1-4 scale (optional, from scraping)
         website: URL (optional)
+        name_normalized: Normalized name for searching
+        search_text: Best-effort search string built from name, brand, operator, etc.
+        search_text_normalized: Normalized search text
+        has_name: Whether the POI has a name
+        popularity: Popularity score for ranking (optional)
     """
 
-    osm_id: int
+    id: int
     coordinates: Coordinates
     category: POICategory
     subcategory: str
@@ -34,6 +39,11 @@ class POI:
     price_range: int | None = None
     website: str | None = None
     tags: dict[str, str] = field(default_factory=dict)
+    name_normalized: str | None = None
+    search_text: str | None = None
+    search_text_normalized: str | None = None
+    has_name: bool = False
+    popularity: int = 0
 
     @classmethod
     def categorize(cls, amenity: str | None, shop: str | None) -> tuple[POICategory, str]:

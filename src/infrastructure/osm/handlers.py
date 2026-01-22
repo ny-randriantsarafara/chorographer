@@ -49,7 +49,7 @@ class WayHandler(osmium.SimpleHandler):
         if len(coords) < 2:
             return
 
-        raw = RawWay(osm_id=w.id, tags=tags, coords=coords)
+        raw = RawWay(id=w.id, tags=tags, coords=coords)
         self.callback(raw)
 
 
@@ -67,7 +67,7 @@ class NodeHandler(osmium.SimpleHandler):
 
         tags = {tag.k: tag.v for tag in n.tags}
         raw = RawNode(
-            osm_id=n.id,
+            id=n.id,
             tags=tags,
             lon=n.location.lon,
             lat=n.location.lat,
@@ -101,7 +101,7 @@ class RelationHandler(osmium.SimpleHandler):
         if len(coords) < 3:
             return
 
-        raw = RawRelation(osm_id=r.id, tags=tags, coords=coords)
+        raw = RawRelation(id=r.id, tags=tags, coords=coords)
         self.callback(raw)
 
 
@@ -181,7 +181,7 @@ class CombinedHandler(osmium.SimpleHandler):
         if len(coords) < 2:
             return
 
-        raw = RawWay(osm_id=w.id, tags=tags, coords=coords)
+        raw = RawWay(id=w.id, tags=tags, coords=coords)
         self.on_way(raw)
 
     def node(self, n: Node) -> None:
@@ -191,7 +191,7 @@ class CombinedHandler(osmium.SimpleHandler):
 
         tags = {tag.k: tag.v for tag in n.tags}
         raw = RawNode(
-            osm_id=n.id,
+            id=n.id,
             tags=tags,
             lon=n.location.lon,
             lat=n.location.lat,
@@ -212,5 +212,5 @@ class CombinedHandler(osmium.SimpleHandler):
         if len(coords) < 3:
             return
 
-        raw = RawRelation(osm_id=r.id, tags=tags, coords=coords)
+        raw = RawRelation(id=r.id, tags=tags, coords=coords)
         self.on_relation(raw)

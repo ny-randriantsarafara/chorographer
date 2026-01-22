@@ -58,7 +58,7 @@ class PostgresWriter(GeoRepository):
     def _road_to_tuple(self, road: Road) -> tuple[Any, ...]:
         """Convert Road entity to insert tuple."""
         return (
-            road.osm_id,
+            road.id,
             _coords_to_wkt_linestring(road.geometry),
             road.road_type.value,
             road.surface.value if road.surface else None,
@@ -128,14 +128,14 @@ class PostgresWriter(GeoRepository):
         """Insert a batch of roads."""
         query = """
             INSERT INTO roads (
-                osm_id, geometry, road_type, surface, smoothness,
+                id, geometry, road_type, surface, smoothness,
                 name, lanes, oneway, max_speed,
                 length, surface_factor, smoothness_factor,
                 effective_speed_kmh, penalized_speed_kmh, tags
             )
             VALUES (%s, ST_GeomFromEWKT(%s), %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (osm_id) DO UPDATE SET
+            ON CONFLICT (id) DO UPDATE SET
                 geometry = EXCLUDED.geometry,
                 road_type = EXCLUDED.road_type,
                 surface = EXCLUDED.surface,
@@ -169,7 +169,7 @@ class PostgresWriter(GeoRepository):
             })
 
         return (
-            poi.osm_id,
+            poi.id,
             _coords_to_wkt_point(poi.coordinates),
             poi.category.value,
             poi.subcategory,
@@ -181,6 +181,11 @@ class PostgresWriter(GeoRepository):
             poi.website,
             poi.is_24_7,
             poi.formatted_address,
+            poi.name_normalized,
+            poi.search_text,
+            poi.search_text_normalized,
+            poi.has_name,
+            poi.popularity,
             json.dumps(poi.tags) if poi.tags else None,
         )
 
@@ -236,13 +241,15 @@ class PostgresWriter(GeoRepository):
         """Insert a batch of POIs."""
         query = """
             INSERT INTO pois (
-                osm_id, geometry, category, subcategory, name,
+                id, geometry, category, subcategory, name,
                 address, phone, opening_hours, price_range, website,
-                is_24_7, formatted_address, tags
+                is_24_7, formatted_address,
+                name_normalized, search_text, search_text_normalized, has_name, popularity,
+                tags
             )
             VALUES (%s, ST_GeomFromEWKT(%s), %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s)
-            ON CONFLICT (osm_id) DO UPDATE SET
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
                 geometry = EXCLUDED.geometry,
                 category = EXCLUDED.category,
                 subcategory = EXCLUDED.subcategory,
@@ -254,6 +261,11 @@ class PostgresWriter(GeoRepository):
                 website = EXCLUDED.website,
                 is_24_7 = EXCLUDED.is_24_7,
                 formatted_address = EXCLUDED.formatted_address,
+                name_normalized = EXCLUDED.name_normalized,
+                search_text = EXCLUDED.search_text,
+                search_text_normalized = EXCLUDED.search_text_normalized,
+                has_name = EXCLUDED.has_name,
+                popularity = EXCLUDED.popularity,
                 tags = EXCLUDED.tags,
                 updated_at = NOW()
         """
@@ -265,11 +277,12 @@ class PostgresWriter(GeoRepository):
     def _zone_to_tuple(self, zone: Zone) -> tuple[Any, ...]:
         """Convert Zone entity to insert tuple."""
         return (
-            zone.osm_id,
+            zone.id,
             _coords_to_wkt_polygon(zone.geometry),
             zone.zone_type,
             zone.name,
-            zone.malagasy_name,
+            zone.level,
+            zone.parent_zone_id,
             zone.iso_code,
             zone.population,
             zone.area,
@@ -329,16 +342,17 @@ class PostgresWriter(GeoRepository):
         """Insert a batch of zones."""
         query = """
             INSERT INTO zones (
-                osm_id, geometry, zone_type, name, malagasy_name,
+                id, geometry, zone_type, name, level, parent_zone_id,
                 iso_code, population, area, centroid, tags
             )
-            VALUES (%s, ST_GeomFromEWKT(%s), %s, %s, %s, %s, %s,
+            VALUES (%s, ST_Multi(ST_GeomFromEWKT(%s)), %s, %s, %s, %s, %s, %s,
                     %s, ST_GeomFromEWKT(%s), %s)
-            ON CONFLICT (osm_id) DO UPDATE SET
+            ON CONFLICT (id) DO UPDATE SET
                 geometry = EXCLUDED.geometry,
                 zone_type = EXCLUDED.zone_type,
                 name = EXCLUDED.name,
-                malagasy_name = EXCLUDED.malagasy_name,
+                level = EXCLUDED.level,
+                parent_zone_id = EXCLUDED.parent_zone_id,
                 iso_code = EXCLUDED.iso_code,
                 population = EXCLUDED.population,
                 area = EXCLUDED.area,

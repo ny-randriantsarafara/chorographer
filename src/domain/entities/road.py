@@ -11,7 +11,7 @@ class Road:
     """Road entity representing an OSM way with highway tag.
 
     Attributes:
-        osm_id: Unique OSM identifier for versioning
+        id: Unique identifier (from OSM)
         geometry: List of coordinates forming the road LineString
         road_type: Classification (primary, secondary, etc.)
         surface: Road surface material
@@ -22,7 +22,7 @@ class Road:
         max_speed: Speed limit in km/h (optional)
     """
 
-    osm_id: int
+    id: int
     geometry: list[Coordinates]
     road_type: RoadType
     surface: Surface = Surface.UNKNOWN

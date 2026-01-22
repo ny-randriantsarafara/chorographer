@@ -114,14 +114,14 @@ def parse_max_speed(tags: dict[str, str]) -> int | None:
 
 
 def transform_road(
-    osm_id: int,
+    id: int,
     tags: dict[str, str],
     coords: list[tuple[float, float]],
 ) -> Road:
     """Transform OSM way data to Road entity.
 
     Args:
-        osm_id: OSM way ID
+        id: OSM way ID
         tags: OSM tags dictionary
         coords: List of (lon, lat) coordinate tuples
 
@@ -131,7 +131,7 @@ def transform_road(
     geometry = [Coordinates(lat=lat, lon=lon) for lon, lat in coords]
 
     return Road(
-        osm_id=osm_id,
+        id=id,
         geometry=geometry,
         road_type=parse_road_type(tags.get("highway", "")),
         surface=parse_surface(tags.get("surface")),
@@ -187,8 +187,47 @@ def categorize_poi(tags: dict[str, str]) -> tuple[POICategory, str]:
     return POICategory.UNKNOWN, amenity or shop or tourism or "unknown"
 
 
+def normalize_text(text: str | None) -> str | None:
+    """Normalize text for searching (lowercase, trim, remove extra spaces)."""
+    if not text:
+        return None
+    import re
+    normalized = text.lower().strip()
+    normalized = re.sub(r'\s+', ' ', normalized)
+    return normalized if normalized else None
+
+
+def build_search_text(name: str | None, tags: dict[str, str]) -> str:
+    """Build best-effort search text from POI fields.
+    
+    Combines name, brand, operator, old_name from tags. Falls back to
+    amenity/shop/tourism if no name-like fields are present.
+    """
+    parts = []
+    
+    if name:
+        parts.append(name)
+    
+    for key in ["brand", "operator", "old_name"]:
+        if key in tags and tags[key]:
+            parts.append(tags[key])
+    
+    # If no name-like fields, use category tags
+    if not parts:
+        for key in ["amenity", "shop", "tourism"]:
+            if key in tags and tags[key]:
+                parts.append(tags[key])
+                break
+    
+    # Last resort
+    if not parts:
+        parts.append("unknown")
+    
+    return " ".join(parts).strip()
+
+
 def transform_poi(
-    osm_id: int,
+    id: int,
     tags: dict[str, str],
     lon: float,
     lat: float,
@@ -196,7 +235,7 @@ def transform_poi(
     """Transform OSM node/way data to POI entity.
 
     Args:
-        osm_id: OSM node/way ID
+        id: OSM node/way ID
         tags: OSM tags dictionary
         lon: Longitude
         lat: Latitude
@@ -214,52 +253,67 @@ def transform_poi(
         except Exception:
             pass  # Skip unparseable hours
 
+    name = tags.get("name")
+    has_name = bool(name and name.strip())
+    name_normalized = normalize_text(name)
+    search_text = build_search_text(name, tags)
+    search_text_normalized = normalize_text(search_text)
+
     return POI(
-        osm_id=osm_id,
+        id=id,
         coordinates=Coordinates(lat=lat, lon=lon),
         category=category,
         subcategory=subcategory,
-        name=tags.get("name"),
+        name=name,
         address=address if not address.is_empty else None,
         phone=tags.get("phone") or tags.get("contact:phone"),
         opening_hours=opening_hours,
         website=tags.get("website") or tags.get("contact:website"),
         tags=tags,
+        name_normalized=name_normalized,
+        search_text=search_text,
+        search_text_normalized=search_text_normalized,
+        has_name=has_name,
+        popularity=0,  # Will be updated later based on usage
     )
 
 
-def parse_zone_type(level: str | None) -> str | None:
-    """Map OSM admin_level to a zone type string."""
+def parse_zone_type(level: str | None) -> tuple[str | None, int | None]:
+    """Map OSM admin_level to a zone type string and hierarchy level.
+    
+    Returns:
+        Tuple of (zone_type, level) or (None, None) if invalid
+    """
     if not level:
-        return None
+        return None, None
 
     mapping = {
-        "2": "country",
-        "4": "region",
-        "6": "district",
-        "8": "commune",
-        "10": "fokontany",
+        "2": ("country", 0),
+        "4": ("region", 1),
+        "6": ("district", 2),
+        "8": ("commune", 3),
+        "10": ("fokontany", 4),
     }
-    return mapping.get(level.strip())
+    return mapping.get(level.strip(), (None, None))
 
 
 def transform_zone(
-    osm_id: int,
+    id: int,
     tags: dict[str, str],
     coords: list[tuple[float, float]],
 ) -> Zone | None:
     """Transform OSM relation data to Zone entity.
 
     Args:
-        osm_id: OSM relation ID
+        id: OSM relation ID
         tags: OSM tags dictionary
         coords: List of (lon, lat) coordinate tuples for outer ring
 
     Returns:
         Zone domain entity or None if invalid
     """
-    zone_type = parse_zone_type(tags.get("admin_level"))
-    if zone_type is None:
+    zone_type, level = parse_zone_type(tags.get("admin_level"))
+    if zone_type is None or level is None:
         return None
 
     name = tags.get("name")
@@ -278,12 +332,13 @@ def transform_zone(
             pass
 
     return Zone(
-        osm_id=osm_id,
+        id=id,
         geometry=geometry,
         zone_type=zone_type,
         name=name,
-        malagasy_name=tags.get("name:mg"),
+        level=level,
         iso_code=tags.get("ISO3166-2"),
         population=population,
+        parent_zone_id=None,  # Will be computed later via spatial containment
         tags=tags,
     )

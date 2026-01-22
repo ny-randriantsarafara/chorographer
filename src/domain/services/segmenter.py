@@ -61,8 +61,8 @@ def split_roads_into_segments(roads: Iterable[Road]) -> list[Segment]:
             start = coords[0]
             end = coords[-1]
             segment = Segment(
-                id=_segment_id(road.osm_id, start, end),
-                road_id=road.osm_id,
+                id=_segment_id(road.id, start, end),
+                road_id=road.id,
                 start=start,
                 end=end,
                 length=length,

@@ -11,22 +11,24 @@ class Zone:
     """Administrative boundary zone.
 
     Attributes:
-        osm_id: Unique OSM identifier
+        id: Unique identifier (from OSM)
         geometry: List of coordinates forming the polygon boundary
         zone_type: Administrative type (country, region, district, commune, fokontany)
         name: Official name
-        malagasy_name: Malagasy name (optional)
         iso_code: ISO 3166-2 code (optional, e.g., MG-A for Antananarivo)
         population: Population count (optional)
+        level: Hierarchy level (0=country, 1=region, 2=district, 3=commune, 4=fokontany)
+        parent_zone_id: ID of parent zone for hierarchy (optional)
     """
 
-    osm_id: int
+    id: int
     geometry: list[Coordinates]
     zone_type: str
     name: str
-    malagasy_name: str | None = None
+    level: int
     iso_code: str | None = None
     population: int | None = None
+    parent_zone_id: int | None = None
     tags: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

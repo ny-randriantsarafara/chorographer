@@ -32,7 +32,7 @@ class PBFReader:
 
         # Get raw ways
         for raw_way in reader.read_raw_ways():
-            # raw_way.osm_id, raw_way.tags, raw_way.coords
+            # raw_way.id, raw_way.tags, raw_way.coords
             ...
     """
 
@@ -78,7 +78,7 @@ class PBFReader:
         """Stream raw ways from PBF file.
 
         Yields:
-            RawWay objects with osm_id, tags, and coords
+            RawWay objects with id, tags, and coords
         """
         nodes = self._collect_nodes()
         ways: list[RawWay] = []
@@ -97,7 +97,7 @@ class PBFReader:
         """Stream raw nodes (with tags) from PBF file.
 
         Yields:
-            RawNode objects with osm_id, tags, lon, lat
+            RawNode objects with id, tags, lon, lat
         """
         nodes: list[RawNode] = []
 
@@ -115,7 +115,7 @@ class PBFReader:
         """Stream raw relations from PBF file.
 
         Yields:
-            RawRelation objects with osm_id, tags, and coords
+            RawRelation objects with id, tags, and coords
         """
         ways = self._collect_ways()
         relations: list[RawRelation] = []
